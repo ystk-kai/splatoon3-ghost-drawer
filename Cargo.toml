@@ -1,0 +1,46 @@
+[package]
+name = "splatoon3-ghost-drawer"
+version = "0.1.0"
+edition = "2024"
+authors = ["Your Name <your.email@example.com>"]
+description = "Splatoon3 artwork posting automation system using DDD architecture"
+license = "MIT"
+
+[dependencies]
+async-trait = "0.1.88"
+serde = { version = "1.0.219", features = ["derive"] }
+serde_json = "1.0.140"
+thiserror = "2.0.12"
+tokio = { version = "1.45.1", features = ["full"] }
+uuid = { version = "1.17.0", features = ["v4", "serde"] }
+# ログとデバッグ用のクレート
+tracing = "0.1.40"
+tracing-subscriber = { version = "0.3.18", features = ["env-filter", "json"] }
+tracing-appender = "0.2.3"
+# Web UI用のクレート
+axum = { version = "0.7.7", features = ["ws", "multipart"] }
+tower = "0.5.1"
+tower-http = { version = "0.6.1", features = ["fs", "cors"] }
+hyper = { version = "1.5.1", features = ["full"] }
+tokio-tungstenite = "0.24.0"
+chrono = { version = "0.4", features = ["serde"] }
+md5 = "0.7.0"
+libc = "0.2"
+clap = { version = "4.5.40", features = ["derive"] }
+anyhow = "1.0.98"
+# 必要なクレートは実装しながら cargo add で追加
+
+[dev-dependencies]
+# テスト用の依存関係
+tracing-test = "0.2.4"
+tokio-test = "0.4.4"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+
+[profile.dev]
+opt-level = 0
+debug = true

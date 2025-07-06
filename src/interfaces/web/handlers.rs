@@ -1,0 +1,110 @@
+use super::log_streamer::stream_logs;
+use super::models::{HardwareDetails, HardwareStatus, SystemInfo};
+use axum::{extract::ws::WebSocketUpgrade, response::Response, Json};
+use std::path::Path;
+
+/// Get system information
+pub async fn get_system_info() -> Json<SystemInfo> {
+    Json(SystemInfo {
+        version: env!("CARGO_PKG_VERSION").to_string(),
+        rust_version: "1.85.0".to_string(), // Since CARGO_PKG_RUST_VERSION is not available
+        os: std::env::consts::OS.to_string(),
+        arch: std::env::consts::ARCH.to_string(),
+        uptime_seconds: get_system_uptime(),
+    })
+}
+
+/// Get hardware status
+pub async fn get_hardware_status() -> Json<HardwareStatus> {
+    let nintendo_switch_connected = check_nintendo_switch_connection().await;
+    let usb_otg_available = check_usb_otg_availability();
+    let hid_device_available = check_hid_device_availability();
+
+    Json(HardwareStatus {
+        nintendo_switch_connected,
+        usb_otg_available,
+        hid_device_available,
+        last_check: chrono::Utc::now().to_rfc3339(),
+        details: get_hardware_details(),
+    })
+}
+
+/// WebSocket handler for log streaming
+pub async fn websocket_handler(ws: WebSocketUpgrade) -> Response {
+    ws.on_upgrade(stream_logs)
+}
+
+// Helper functions
+
+fn get_system_uptime() -> u64 {
+    // Try to read system uptime from /proc/uptime
+    if let Ok(contents) = std::fs::read_to_string("/proc/uptime") {
+        if let Some(uptime_str) = contents.split_whitespace().next() {
+            if let Ok(uptime) = uptime_str.parse::<f64>() {
+                return uptime as u64;
+            }
+        }
+    }
+    0
+}
+
+async fn check_nintendo_switch_connection() -> bool {
+    // Check if HID device is available and if gadget is active
+    if !check_hid_device_availability() {
+        return false;
+    }
+
+    // Check USB Gadget state
+    let gadget_udc_path = "/sys/kernel/config/usb_gadget/g1/UDC";
+    if let Ok(udc_content) = std::fs::read_to_string(gadget_udc_path) {
+        return !udc_content.trim().is_empty();
+    }
+
+    false
+}
+
+fn check_usb_otg_availability() -> bool {
+    // Check if USB OTG is configured
+    Path::new("/sys/kernel/config/usb_gadget").exists()
+}
+
+fn check_hid_device_availability() -> bool {
+    // Check if HID device exists
+    let hid_path = "/dev/hidg0";
+    Path::new(hid_path).exists()
+}
+
+fn get_hardware_details() -> HardwareDetails {
+    let mut details = HardwareDetails {
+        board_model: None,
+        usb_gadget_configured: false,
+        hid_device_path: None,
+        kernel_modules_loaded: Vec::new(),
+    };
+
+    // Get board model
+    if let Ok(model) = std::fs::read_to_string("/proc/device-tree/model") {
+        details.board_model = Some(model.trim_end_matches('\0').to_string());
+    }
+
+    // Check USB gadget configuration
+    details.usb_gadget_configured = Path::new("/sys/kernel/config/usb_gadget/g1").exists();
+
+    // Check HID device
+    if Path::new("/dev/hidg0").exists() {
+        details.hid_device_path = Some("/dev/hidg0".to_string());
+    }
+
+    // Check loaded kernel modules
+    if let Ok(modules) = std::fs::read_to_string("/proc/modules") {
+        for line in modules.lines() {
+            if let Some(module_name) = line.split_whitespace().next() {
+                if module_name.contains("libcomposite") || module_name.contains("dwc2") {
+                    details.kernel_modules_loaded.push(module_name.to_string());
+                }
+            }
+        }
+    }
+
+    details
+}

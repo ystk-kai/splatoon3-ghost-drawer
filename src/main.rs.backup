@@ -1,0 +1,1211 @@
+//! Splatoon3 Ghost Drawer
+//! 
+//! Nintendo Switch Pro Controllerをシミュレートして
+//! Splatoon3で自動的にイラストを描画するシステム
+
+use splatoon3_ghost_drawer::domain::artwork::entities::{Artwork, ArtworkMetadata, Canvas, Dot};
+use splatoon3_ghost_drawer::domain::artwork::value_objects::ImageFormat;
+use splatoon3_ghost_drawer::domain::shared::value_objects::{Color, Coordinates};
+use splatoon3_ghost_drawer::debug::{DebugConfig, init_logging, debug_helpers};
+use splatoon3_ghost_drawer::application::use_cases::setup_usb_gadget::SetupUsbGadgetUseCase;
+use splatoon3_ghost_drawer::infrastructure::hardware::{
+    board_detector::LinuxBoardDetector,
+    linux_usb_gadget::LinuxUsbGadgetManager,
+    systemd_service::SystemdServiceManager,
+};
+
+use std::env;
+use std::path::PathBuf;
+use std::process;
+use tracing::{info, error, debug, instrument};
+
+// Web UI用のインポート
+use axum::{
+    extract::ws::{Message, WebSocket, WebSocketUpgrade},
+    extract::{Path, State},
+    http::StatusCode,
+    response::Response,
+    routing::{get, post},
+    Json, Router,
+};
+use tower::ServiceBuilder;
+use tower_http::{
+    cors::CorsLayer,
+    services::ServeDir,
+};
+use std::collections::HashMap;
+use std::sync::Arc;
+use tokio::sync::RwLock;
+use serde::{Deserialize, Serialize};
+
+/// アプリケーションの設定
+#[derive(Debug, Clone)]
+pub struct AppConfig {
+    pub verbose: bool,
+}
+
+impl Default for AppConfig {
+    fn default() -> Self {
+        Self {
+            verbose: false,
+        }
+    }
+}
+
+/// CLIコマンド
+#[derive(Debug, Clone)]
+pub enum Command {
+    /// ヘルプを表示
+    Help,
+    /// バージョンを表示
+    Version,
+    /// Web UIサーバーを起動
+    Serve {
+        port: Option<u16>,
+        host: Option<String>,
+    },
+    /// USB Gadgetをセットアップ
+    SetupGadget {
+        force: bool,
+    },
+}
+
+/// アプリケーションエラー
+#[derive(Debug, thiserror::Error)]
+pub enum AppError {
+    #[error("Invalid command line arguments: {message}")]
+    InvalidArgs { message: String },
+    #[error("File not found: {path}")]
+    FileNotFound { path: PathBuf },
+    #[error("Invalid file format: {format}")]
+    InvalidFormat { format: String },
+    #[error("Processing error: {message}")]
+    ProcessingError { message: String },
+    #[error("Configuration error: {message}")]
+    ConfigError { message: String },
+    #[error("IO error: {source}")]
+    IoError { #[from] source: std::io::Error },
+}
+
+/// CLIアプリケーション
+pub struct App {
+    config: AppConfig,
+}
+
+impl App {
+    /// 新しいアプリケーションインスタンスを作成
+    pub fn new(config: AppConfig) -> Self {
+        Self { config }
+    }
+
+    /// アプリケーションを実行
+    #[instrument(skip(self), fields(verbose = %self.config.verbose))]
+    pub async fn run(&self, command: Command) -> Result<(), AppError> {
+        info!("アプリケーション実行開始");
+        
+        if self.config.verbose {
+            debug!("実行コマンド: {:?}", command);
+            debug!("設定: {:?}", self.config);
+        }
+
+        let result = match command {
+            Command::Help => {
+                info!("ヘルプコマンドを実行");
+                self.show_help()
+            },
+            Command::Version => {
+                info!("バージョンコマンドを実行");
+                self.show_version()
+            },
+            Command::Serve { ref port, ref host } => {
+                info!(
+                    port = ?port,
+                    host = ?host,
+                    "Web UIサーバーを起動"
+                );
+                self.start_web_server(port.unwrap_or(8080), host.clone().unwrap_or_else(|| "127.0.0.1".to_string())).await
+            },
+            Command::SetupGadget { force } => {
+                info!(
+                    force = %force,
+                    "USB Gadgetセットアップコマンドを実行"
+                );
+                self.setup_usb_gadget(force).await
+            },
+        };
+
+        match &result {
+            Ok(()) => info!("コマンドが正常に完了しました"),
+            Err(e) => error!("コマンドの実行中にエラーが発生しました: {}", e),
+        }
+
+        result
+    }
+
+    /// ヘルプを表示
+    fn show_help(&self) -> Result<(), AppError> {
+        println!("Splatoon3 Ghost Drawer v{}", env!("CARGO_PKG_VERSION"));
+        println!("Nintendo Switch Pro Controllerをシミュレートしてイラストを自動描画");
+        println!();
+        println!("使用方法:");
+        println!("  {} [オプション] <コマンド> [引数...]", env!("CARGO_PKG_NAME"));
+        println!();
+        println!("コマンド:");
+        println!("  serve                          Web UIサーバーを起動 (デフォルト: 127.0.0.1:8080)");
+        println!("  setup-gadget                   USB Gadgetをセットアップ");
+        println!("  help                           このヘルプを表示");
+        println!("  version                        バージョンを表示");
+        println!();
+        println!("オプション:");
+        println!("  -v, --verbose                  詳細出力を有効化");
+        println!();
+        println!("serve コマンドのオプション:");
+        println!("  --port <ポート>                サーバーポート (デフォルト: 8080)");
+        println!("  --host <ホスト>                ホストアドレス (デフォルト: 127.0.0.1)");
+        println!();
+        println!("setup-gadget コマンドのオプション:");
+        println!("  --force                        既存の設定を強制的に上書き");
+        println!();
+        println!("例:");
+        println!("  {} serve", env!("CARGO_PKG_NAME"));
+        println!("  {} serve --port 8080 --host 0.0.0.0", env!("CARGO_PKG_NAME"));
+        println!("  {} setup-gadget", env!("CARGO_PKG_NAME"));
+        println!("  {} setup-gadget --force", env!("CARGO_PKG_NAME"));
+        
+        Ok(())
+    }
+
+    /// バージョンを表示
+    fn show_version(&self) -> Result<(), AppError> {
+        println!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
+        println!("作者: {}", env!("CARGO_PKG_AUTHORS"));
+        println!("説明: {}", env!("CARGO_PKG_DESCRIPTION"));
+        Ok(())
+    }
+
+
+
+
+
+
+
+    /// サンプルキャンバスを作成
+    fn create_sample_canvas(&self) -> Canvas {
+        let mut canvas = Canvas::new(100, 100);
+        
+        // サンプルパターンを作成
+        for y in 0..100 {
+            for x in 0..100 {
+                let coord = Coordinates::new(x, y);
+                let color = if (x + y) % 2 == 0 {
+                    Color::new(255, 0, 0, 255) // 赤
+                } else {
+                    Color::new(0, 0, 255, 255) // 青
+                };
+                let dot = Dot::new(color, 255);
+                let _ = canvas.set_dot(coord, dot);
+            }
+        }
+        
+        canvas
+    }
+
+    /// 描画プレビューを表示
+    async fn show_painting_preview(&self, artwork: &Artwork, dots_per_second: f64) -> Result<(), AppError> {
+        let drawable_dots = artwork.drawable_dots();
+        let estimated_time = artwork.estimated_painting_time(dots_per_second);
+
+        println!("  描画可能ドット数: {}", drawable_dots);
+        println!("  推定描画時間: {}秒", estimated_time);
+        println!("  描画速度: {:.1} ドット/秒", dots_per_second);
+        println!("  完成度: {:.1}%", artwork.completion_ratio() * 100.0);
+        println!("  複雑度: {:.3}", artwork.complexity_score());
+
+        // 最初の数ドットの座標を表示
+        let dots: Vec<_> = artwork.canvas.drawable_dots().into_iter().take(5).collect();
+        if !dots.is_empty() {
+            println!("  最初の描画ドット:");
+            for (i, (coord, dot)) in dots.iter().enumerate() {
+                println!("    {}. {} - {}", i + 1, coord, dot.color);
+            }
+            if artwork.canvas.drawable_dots().len() > 5 {
+                println!("    ... 他{}個", artwork.canvas.drawable_dots().len() - 5);
+            }
+        }
+
+        Ok(())
+    }
+
+    /// 描画をシミュレート
+    async fn simulate_painting(&self, artwork: &Artwork, dots_per_second: f64) -> Result<(), AppError> {
+        let drawable_dots = artwork.canvas.drawable_dots();
+        let total_dots = drawable_dots.len();
+        
+        if total_dots == 0 {
+            println!("描画するドットがありません");
+            return Ok(());
+        }
+
+        let interval_ms = (1000.0 / dots_per_second) as u64;
+        
+        println!("描画進行中:");
+        for (i, (coord, _dot)) in drawable_dots.iter().enumerate() {
+            let progress = ((i + 1) as f64 / total_dots as f64) * 100.0;
+            
+            if self.config.verbose {
+                println!("  ドット {} を {} に描画中... ({:.1}%)", i + 1, coord, progress);
+            } else if i % 10 == 0 || i == total_dots - 1 {
+                println!("  進捗: {:.1}% ({}/{})", progress, i + 1, total_dots);
+            }
+
+            // 描画の遅延をシミュレート
+            tokio::time::sleep(tokio::time::Duration::from_millis(interval_ms)).await;
+        }
+
+        Ok(())
+    }
+
+    /// USB Gadgetをセットアップ
+    #[instrument(skip(self), fields(force = %force))]
+    async fn setup_usb_gadget(&self, force: bool) -> Result<(), AppError> {
+        info!("USB Gadgetセットアップを開始");
+
+        // root権限チェック
+        let euid = unsafe { libc::geteuid() };
+        if euid != 0 {
+            return Err(AppError::ProcessingError {
+                message: "このコマンドを実行するにはroot権限が必要です。sudoを使用してください。".to_string(),
+            });
+        }
+
+        // リポジトリを作成
+        let board_repo = LinuxBoardDetector::new();
+        let gadget_repo = LinuxUsbGadgetManager::new();
+        let service_repo = SystemdServiceManager::new();
+
+        // ユースケースを実行
+        let use_case = SetupUsbGadgetUseCase::new(board_repo, gadget_repo, service_repo);
+        let result = use_case.execute(force).await
+            .map_err(|e| AppError::ProcessingError {
+                message: format!("USB Gadgetのセットアップに失敗しました: {}", e),
+            })?;
+
+        // 結果を表示
+        println!("✅ USB Gadgetセットアップ完了");
+        println!();
+        println!("{}", result.summary());
+
+        if result.reboot_required {
+            println!();
+            println!("⚠️  再起動が必要です。以下のコマンドを実行してください:");
+            println!("    sudo reboot");
+        }
+
+        Ok(())
+    }
+
+    /// Web UIサーバーを起動
+    #[instrument(skip(self), fields(host = %host, port = %port))]
+    async fn start_web_server(&self, port: u16, host: String) -> Result<(), AppError> {
+        info!("Web UIサーバーを起動中");
+
+        // 共有状態を作成
+        let app_state = Arc::new(AppState {
+            artworks: Arc::new(RwLock::new(HashMap::new())),
+            config: self.config.clone(),
+        });
+
+        // ルーターを構築
+        let app = Router::new()
+            // 静的ファイル（Web UI）
+            .nest_service("/", ServeDir::new("web"))
+            // API エンドポイント
+            .route("/api/artworks", get(list_artworks).post(create_artwork_api))
+            .route("/api/artworks/upload", post(upload_artwork_api))
+            .route("/api/artworks/:id", get(get_artwork).delete(delete_artwork))
+            .route("/api/artworks/:id/paint", post(paint_artwork_api))
+            .route("/api/config", get(get_config_handler))
+            .route("/api/system/info", get(get_system_info))
+            .route("/api/hardware/status", get(get_hardware_status))
+            // WebSocket エンドポイント（ログストリーミング用）
+            .route("/ws/logs", get(websocket_handler))
+            // 状態を共有
+            .with_state(app_state)
+            // CORS設定
+            .layer(
+                ServiceBuilder::new()
+                    .layer(CorsLayer::permissive())
+            );
+
+        let addr = format!("{}:{}", host, port);
+        info!(address = %addr, "Web UIサーバーを開始");
+
+        println!("🌐 Web UI サーバーが起動しました");
+        println!("   URL: http://{}", addr);
+        println!("   Ctrl+C で停止");
+
+        // サーバーを起動
+        let listener = tokio::net::TcpListener::bind(&addr).await
+            .map_err(|e| AppError::ProcessingError {
+                message: format!("サーバーの起動に失敗しました: {}", e),
+            })?;
+
+        axum::serve(listener, app).await
+            .map_err(|e| AppError::ProcessingError {
+                message: format!("サーバーの実行中にエラーが発生しました: {}", e),
+            })?;
+
+        Ok(())
+    }
+}
+
+/// アプリケーションの共有状態
+#[derive(Clone)]
+struct AppState {
+    artworks: Arc<RwLock<HashMap<String, Artwork>>>,
+    config: AppConfig,
+}
+
+/// API: アートワーク一覧取得
+async fn list_artworks(State(state): State<Arc<AppState>>) -> Json<Vec<ArtworkSummary>> {
+    let artworks = state.artworks.read().await;
+    let summaries: Vec<ArtworkSummary> = artworks
+        .values()
+        .map(|artwork| ArtworkSummary {
+            id: artwork.id.as_str().to_string(),
+            name: artwork.metadata.name.clone(),
+            format: artwork.original_format.clone(),
+            canvas_size: format!("{}x{}", artwork.canvas.width, artwork.canvas.height),
+            total_dots: artwork.total_dots(),
+            drawable_dots: artwork.drawable_dots(),
+            completion_ratio: artwork.completion_ratio(),
+            created_at: artwork.created_at.epoch_millis,
+            updated_at: artwork.updated_at.epoch_millis,
+        })
+        .collect();
+    
+    Json(summaries)
+}
+
+/// API: アートワーク作成
+async fn create_artwork_api(
+    State(state): State<Arc<AppState>>,
+    Json(request): Json<CreateArtworkRequest>,
+) -> Result<Json<ArtworkResponse>, StatusCode> {
+    info!(name = %request.name, "API経由でアートワークを作成");
+    
+    // ドットデータからキャンバスを作成
+    let mut canvas = Canvas::new(request.width, request.height);
+    
+    // ドット数を保存
+    let dot_count = request.dots.len();
+    
+    // ドットデータを設定
+    for dot_data in request.dots {
+        let coord = Coordinates::new(dot_data.x, dot_data.y);
+        let color = Color::new(
+            dot_data.color.r,
+            dot_data.color.g,
+            dot_data.color.b,
+            dot_data.color.a,
+        );
+        let dot = Dot::new(color, 255);
+        let _ = canvas.set_dot(coord, dot);
+    }
+    
+    let metadata = ArtworkMetadata::new(request.name.clone())
+        .with_description(request.description.unwrap_or_else(|| "Web UI経由で作成（ブラウザで処理済み）".to_string()));
+    
+    let artwork = Artwork::new(metadata, "png".to_string(), canvas);
+    let artwork_id = artwork.id.as_str();
+    
+    // 状態に保存
+    state.artworks.write().await.insert(artwork_id.to_string(), artwork.clone());
+    
+    info!(
+        artwork_id = %artwork_id,
+        width = %request.width,
+        height = %request.height,
+        dot_count = %dot_count,
+        "アートワークがAPI経由で作成されました"
+    );
+    
+    Ok(Json(ArtworkResponse {
+        id: artwork_id.to_string(),
+        message: format!("アートワークが作成されました: {}x{}, {}ドット", 
+            request.width, 
+            request.height, 
+            dot_count
+        ),
+        artwork: None,  // 一時的にartworkの詳細をスキップ（シリアライゼーション問題のため）
+    }))
+}
+
+/// API: 画像アップロード
+async fn upload_artwork_api(
+    State(state): State<Arc<AppState>>,
+    mut multipart: axum::extract::Multipart,
+) -> Result<Json<ArtworkResponse>, StatusCode> {
+    use std::io::Write;
+    
+    info!("画像アップロードを開始");
+    
+    // エラーハンドリング用のマクロ
+    macro_rules! handle_error {
+        ($e:expr, $msg:expr) => {
+            match $e {
+                Ok(val) => val,
+                Err(e) => {
+                    error!("{}: {:?}", $msg, e);
+                    return Err(StatusCode::INTERNAL_SERVER_ERROR);
+                }
+            }
+        };
+    }
+    
+    let mut name = "Untitled".to_string();
+    let mut image_data: Option<Vec<u8>> = None;
+    let mut original_filename: Option<String> = None;
+    let mut threshold = 128u8;
+    let mut dithering_type = "none".to_string();
+    let mut dithering_strength = 50u8;
+    let mut _output_format = "json".to_string();
+    let mut _compression = 6u8;
+    
+    // 新しい画像調整パラメータ
+    let mut exposure = 0.0f32;
+    let mut contrast = 0i8;
+    let mut black_point = 0u8;
+    let mut white_point = 255u8;
+    let mut gamma = 1.0f32;
+    let mut highlights = 0i8;
+    let mut shadows = 0i8;
+    let mut brightness = 0i8;
+    let mut adaptive_threshold = false;
+    let mut adaptive_block_size = 11u16;
+    let mut adaptive_constant = 2i8;
+    
+    // マルチパートデータを処理
+    while let Some(field) = multipart.next_field().await.map_err(|_| StatusCode::BAD_REQUEST)? {
+        let field_name = field.name().unwrap_or("").to_string();
+        
+        match field_name.as_str() {
+            "file" => {
+                original_filename = field.file_name().map(|s| s.to_string());
+                image_data = Some(field.bytes().await.map_err(|_| StatusCode::BAD_REQUEST)?.to_vec());
+            },
+            "name" => {
+                name = field.text().await.map_err(|_| StatusCode::BAD_REQUEST)?;
+            },
+            "threshold" => {
+                threshold = field.text().await.map_err(|_| StatusCode::BAD_REQUEST)?
+                    .parse().unwrap_or(128);
+            },
+            "dithering_type" => {
+                dithering_type = field.text().await.map_err(|_| StatusCode::BAD_REQUEST)?;
+            },
+            "dithering_strength" => {
+                dithering_strength = field.text().await.map_err(|_| StatusCode::BAD_REQUEST)?
+                    .parse().unwrap_or(50);
+            },
+            "output_format" => {
+                _output_format = field.text().await.map_err(|_| StatusCode::BAD_REQUEST)?;
+            },
+            "compression" => {
+                _compression = field.text().await.map_err(|_| StatusCode::BAD_REQUEST)?
+                    .parse().unwrap_or(6);
+            },
+            // 新しい調整パラメータ
+            "exposure" => {
+                exposure = field.text().await.map_err(|_| StatusCode::BAD_REQUEST)?
+                    .parse().unwrap_or(0.0);
+            },
+            "contrast" => {
+                contrast = field.text().await.map_err(|_| StatusCode::BAD_REQUEST)?
+                    .parse().unwrap_or(0);
+            },
+            "black_point" => {
+                black_point = field.text().await.map_err(|_| StatusCode::BAD_REQUEST)?
+                    .parse().unwrap_or(0);
+            },
+            "white_point" => {
+                white_point = field.text().await.map_err(|_| StatusCode::BAD_REQUEST)?
+                    .parse().unwrap_or(255);
+            },
+            "gamma" => {
+                gamma = field.text().await.map_err(|_| StatusCode::BAD_REQUEST)?
+                    .parse().unwrap_or(1.0);
+            },
+            "highlights" => {
+                highlights = field.text().await.map_err(|_| StatusCode::BAD_REQUEST)?
+                    .parse().unwrap_or(0);
+            },
+            "shadows" => {
+                shadows = field.text().await.map_err(|_| StatusCode::BAD_REQUEST)?
+                    .parse().unwrap_or(0);
+            },
+            "brightness" => {
+                brightness = field.text().await.map_err(|_| StatusCode::BAD_REQUEST)?
+                    .parse().unwrap_or(0);
+            },
+            "adaptive_threshold" => {
+                adaptive_threshold = field.text().await.map_err(|_| StatusCode::BAD_REQUEST)?
+                    .parse().unwrap_or(false);
+            },
+            "adaptive_block_size" => {
+                adaptive_block_size = field.text().await.map_err(|_| StatusCode::BAD_REQUEST)?
+                    .parse().unwrap_or(11);
+            },
+            "adaptive_constant" => {
+                adaptive_constant = field.text().await.map_err(|_| StatusCode::BAD_REQUEST)?
+                    .parse().unwrap_or(2);
+            },
+            _ => {
+                // 未知のフィールドは無視
+            }
+        }
+    }
+    
+    // 画像データが存在するかチェック
+    let image_bytes = image_data.ok_or(StatusCode::BAD_REQUEST)?;
+    
+    info!(
+        name = %name,
+        filename = ?original_filename,
+        image_size = %image_bytes.len(),
+        threshold = %threshold,
+        dithering_type = %dithering_type,
+        "画像アップロード処理を開始"
+    );
+    
+    // 画像フォーマットを推定
+    let image_format = if let Some(filename) = &original_filename {
+        ImageFormat::from_filename(filename).unwrap_or(ImageFormat::Png)
+    } else {
+        // バイナリデータから推定（簡易版）
+        if image_bytes.starts_with(&[0x89, 0x50, 0x4E, 0x47]) {
+            ImageFormat::Png
+        } else if image_bytes.starts_with(&[0xFF, 0xD8, 0xFF]) {
+            ImageFormat::Jpeg
+        } else {
+            ImageFormat::Png
+        }
+    };
+    
+    // 一時ファイルに保存（実際の実装では画像処理ライブラリを使用）
+    let temp_dir = std::env::temp_dir();
+    let temp_file = temp_dir.join(format!("upload_{}.{}", uuid::Uuid::new_v4(), image_format.extension()));
+    
+    {
+        let mut file = handle_error!(
+            std::fs::File::create(&temp_file),
+            "一時ファイルの作成に失敗"
+        );
+        handle_error!(
+            file.write_all(&image_bytes),
+            "一時ファイルへの書き込みに失敗"
+        );
+    }
+    
+    // メタデータを作成
+    let mut metadata = ArtworkMetadata::new(name.clone())
+        .with_description(format!("Web UI経由でアップロード: {}", original_filename.as_ref().unwrap_or(&"unknown".to_string())));
+    
+    if let Some(filename) = &original_filename {
+        metadata.original_filename = Some(filename.clone());
+    }
+    metadata.file_size = image_bytes.len() as u64;
+    metadata.checksum = format!("{:x}", md5::compute(&image_bytes));
+    
+    // 画像調整パラメータを構築
+    let adjustments = splatoon3_ghost_drawer::domain::artwork::value_objects::ImageAdjustments {
+        exposure,
+        contrast,
+        black_point,
+        white_point,
+        gamma,
+        highlights,
+        shadows,
+        brightness,
+        threshold,
+        adaptive_threshold,
+        adaptive_block_size,
+        adaptive_constant,
+    };
+    
+    // サンプルキャンバスを作成（実際の実装では画像を解析して変換）
+    let canvas = create_processed_canvas(&image_bytes, &adjustments, &dithering_type, dithering_strength);
+    
+    // アートワークを作成
+    let artwork = Artwork::new(metadata, image_format.extension().to_string(), canvas);
+    let artwork_id = artwork.id.as_str();
+    
+    // 状態に保存
+    state.artworks.write().await.insert(artwork_id.to_string(), artwork.clone());
+    
+    // 一時ファイルを削除
+    let _ = std::fs::remove_file(temp_file);
+    
+    info!(
+        artwork_id = %artwork_id,
+        name = %name,
+        format = %image_format,
+        canvas_size = format!("{}x{}", artwork.canvas.width, artwork.canvas.height),
+        total_dots = %artwork.total_dots(),
+        drawable_dots = %artwork.drawable_dots(),
+        "画像アップロードが完了しました"
+    );
+    
+    Ok(Json(ArtworkResponse {
+        id: artwork_id.to_string(),
+        message: format!("画像アップロードと変換が完了しました: {} ({}x{})", 
+            name, 
+            artwork.canvas.width, 
+            artwork.canvas.height
+        ),
+        artwork: None,  // 一時的にartworkの詳細をスキップ（シリアライゼーション問題のため）
+    }))
+}
+
+/// API: アートワーク取得
+async fn get_artwork(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+) -> Result<Json<Artwork>, StatusCode> {
+    let artworks = state.artworks.read().await;
+    match artworks.get(&id) {
+        Some(artwork) => Ok(Json(artwork.clone())),
+        None => Err(StatusCode::NOT_FOUND),
+    }
+}
+
+/// API: アートワーク削除
+async fn delete_artwork(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+) -> Result<Json<ApiResponse>, StatusCode> {
+    let mut artworks = state.artworks.write().await;
+    match artworks.remove(&id) {
+        Some(_) => {
+            info!(artwork_id = %id, "アートワークが削除されました");
+            Ok(Json(ApiResponse {
+                success: true,
+                message: "アートワークが削除されました".to_string(),
+            }))
+        },
+        None => Err(StatusCode::NOT_FOUND),
+    }
+}
+
+/// API: アートワーク描画
+async fn paint_artwork_api(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+    Json(request): Json<PaintRequest>,
+) -> Result<Json<ApiResponse>, StatusCode> {
+    // アートワークの取得と所有権の移動
+    let artwork = {
+        let mut artworks = state.artworks.write().await;
+        match artworks.remove(&id) {
+            Some(artwork) => artwork,
+            None => return Err(StatusCode::NOT_FOUND),
+        }
+    };
+    
+    info!(
+        artwork_id = %id,
+        speed = %request.speed.unwrap_or(2.0),
+        preview = %request.preview.unwrap_or(false),
+        "API経由で描画を開始"
+    );
+    
+    // 描画シミュレーション（実際の実装では描画処理を実行）
+    let speed = request.speed.unwrap_or(2.0);
+    let estimated_time = artwork.estimated_painting_time(speed);
+    let drawable_dots = artwork.drawable_dots();
+    
+    // 描画処理をバックグラウンドで実行
+    let id_clone = id.clone();
+    tokio::spawn(async move {
+        info!(
+            artwork_id = %id_clone,
+            dot_count = %drawable_dots,
+            "描画処理を開始しました"
+        );
+        
+        // 実際の描画処理をシミュレート
+        tokio::time::sleep(tokio::time::Duration::from_secs(estimated_time)).await;
+        
+        info!(
+            artwork_id = %id_clone,
+            "描画が完了しました。アートワークデータを破棄します"
+        );
+        
+        // 描画完了後、データは自動的に破棄される（スコープを抜けるため）
+    });
+    
+    Ok(Json(ApiResponse {
+        success: true,
+        message: format!("描画を開始しました（推定時間: {}秒）。完了後、データは自動的に破棄されます。", estimated_time),
+    }))
+}
+
+/// API: 設定取得
+async fn get_config_handler(State(state): State<Arc<AppState>>) -> Json<serde_json::Value> {
+    Json(serde_json::json!({
+        "verbose": state.config.verbose,
+    }))
+}
+
+/// API: システム情報取得
+async fn get_system_info() -> Json<SystemInfo> {
+    Json(SystemInfo {
+        version: env!("CARGO_PKG_VERSION").to_string(),
+        rust_version: env!("CARGO_PKG_RUST_VERSION").to_string(),
+        os: std::env::consts::OS.to_string(),
+        arch: std::env::consts::ARCH.to_string(),
+        uptime_seconds: 0, // TODO: 実際の稼働時間を実装
+    })
+}
+
+/// API: ハードウェア接続状態取得
+async fn get_hardware_status() -> Json<HardwareStatus> {
+    let nintendo_switch_connected = check_nintendo_switch_connection().await;
+    let usb_otg_available = check_usb_otg_availability();
+    let hid_device_available = check_hid_device_availability();
+    
+    Json(HardwareStatus {
+        nintendo_switch_connected,
+        usb_otg_available,
+        hid_device_available,
+        last_check: chrono::Utc::now().to_rfc3339(),
+        details: get_hardware_details(),
+    })
+}
+
+/// Nintendo Switchとの接続状態を確認
+async fn check_nintendo_switch_connection() -> bool {
+    // HIDデバイスが存在し、かつアクティブな接続があるかチェック
+    if !check_hid_device_availability() {
+        return false;
+    }
+    
+    // USB Gadgetの状態をチェック
+    if let Ok(udc_content) = std::fs::read_to_string("/sys/kernel/config/usb_gadget/nintendo_controller/UDC") {
+        return !udc_content.trim().is_empty();
+    }
+    
+    false
+}
+
+/// USB OTGの利用可能性をチェック
+fn check_usb_otg_availability() -> bool {
+    // dwc2ドライバーが読み込まれているかチェック
+    if let Ok(modules) = std::fs::read_to_string("/proc/modules") {
+        if modules.contains("dwc2") {
+            return true;
+        }
+    }
+    
+    // USB Gadget設定ディレクトリの存在をチェック
+    std::path::Path::new("/sys/kernel/config/usb_gadget").exists()
+}
+
+/// HIDデバイスの利用可能性をチェック
+fn check_hid_device_availability() -> bool {
+    // /dev/hidg0 などのHIDデバイスファイルの存在をチェック
+    for i in 0..10 {
+        let hid_path = format!("/dev/hidg{}", i);
+        if std::path::Path::new(&hid_path).exists() {
+            return true;
+        }
+    }
+    false
+}
+
+/// ハードウェアの詳細情報を取得
+fn get_hardware_details() -> HardwareDetails {
+    let mut usb_gadgets = Vec::new();
+    let mut hid_devices = Vec::new();
+    
+    // USB Gadgetの一覧を取得
+    if let Ok(entries) = std::fs::read_dir("/sys/kernel/config/usb_gadget") {
+        for entry in entries.flatten() {
+            if let Some(name) = entry.file_name().to_str() {
+                usb_gadgets.push(name.to_string());
+            }
+        }
+    }
+    
+    // HIDデバイスの一覧を取得
+    for i in 0..10 {
+        let hid_path = format!("/dev/hidg{}", i);
+        if std::path::Path::new(&hid_path).exists() {
+            hid_devices.push(hid_path);
+        }
+    }
+    
+    // ボードモデルを検出
+    let board_model = detect_board_model();
+    
+    HardwareDetails {
+        board_model,
+        usb_gadgets,
+        hid_devices,
+        dwc2_loaded: check_dwc2_module(),
+        libcomposite_loaded: check_libcomposite_module(),
+    }
+}
+
+/// ボードモデルを検出
+fn detect_board_model() -> String {
+    if let Ok(cpuinfo) = std::fs::read_to_string("/proc/cpuinfo") {
+        if cpuinfo.contains("Orange Pi Zero 2W") || cpuinfo.contains("sun50iw9") {
+            return "Orange Pi Zero 2W".to_string();
+        } else if cpuinfo.contains("Raspberry Pi Zero 2") {
+            return "Raspberry Pi Zero 2W".to_string();
+        } else if cpuinfo.contains("Raspberry Pi Zero") {
+            return "Raspberry Pi Zero W".to_string();
+        }
+    }
+    "Unknown".to_string()
+}
+
+/// dwc2モジュールの読み込み状態をチェック
+fn check_dwc2_module() -> bool {
+    if let Ok(modules) = std::fs::read_to_string("/proc/modules") {
+        return modules.contains("dwc2");
+    }
+    false
+}
+
+/// libcompositeモジュールの読み込み状態をチェック
+fn check_libcomposite_module() -> bool {
+    if let Ok(modules) = std::fs::read_to_string("/proc/modules") {
+        return modules.contains("libcomposite");
+    }
+    false
+}
+
+/// WebSocket ハンドラー（ログストリーミング用）
+async fn websocket_handler(ws: WebSocketUpgrade) -> Response {
+    ws.on_upgrade(handle_websocket)
+}
+
+/// WebSocket 接続処理
+async fn handle_websocket(mut socket: WebSocket) {
+    info!("WebSocket接続が確立されました");
+    
+    // ウェルカムメッセージを送信
+    let welcome_msg = serde_json::json!({
+        "timestamp": chrono::Utc::now().to_rfc3339(),
+        "level": "INFO",
+        "message": "ログストリーミングが開始されました",
+        "target": "websocket",
+        "fields": {},
+        "span": null
+    });
+    
+    if socket.send(Message::Text(welcome_msg.to_string())).await.is_err() {
+        return;
+    }
+    
+    // 接続を維持（実際の実装ではログをストリーミング）
+    loop {
+        tokio::time::sleep(tokio::time::Duration::from_secs(30)).await;
+        
+        let heartbeat = serde_json::json!({
+            "timestamp": chrono::Utc::now().to_rfc3339(),
+            "level": "DEBUG",
+            "message": "WebSocket heartbeat",
+            "target": "websocket",
+            "fields": {},
+            "span": null
+        });
+        
+        if socket.send(Message::Text(heartbeat.to_string())).await.is_err() {
+            break;
+        }
+    }
+    
+    info!("WebSocket接続が終了しました");
+}
+
+/// 画像データを処理してキャンバスを作成
+fn create_processed_canvas(
+    image_bytes: &[u8], 
+    adjustments: &splatoon3_ghost_drawer::domain::artwork::value_objects::ImageAdjustments,
+    dithering_type: &str, 
+    dithering_strength: u8
+) -> Canvas {
+    // 実際の実装では画像処理ライブラリを使用
+    // ここではサンプルとして簡単な処理を行う
+    
+    let width = 320u16;
+    let height = 120u16;  // Splatoon3標準解像度
+    let mut canvas = Canvas::new(width, height);
+    
+    // 画像サイズに基づいてパターンを生成
+    let pattern_scale = (image_bytes.len() as f32 / 10000.0).min(2.0).max(0.5);
+    
+    for y in 0..height {
+        for x in 0..width {
+            let coord = Coordinates::new(x, y);
+            
+            // 画像データのハッシュ値を使用してパターンを生成
+            let hash_input = format!("{}-{}-{}", x, y, image_bytes.len());
+            let hash = md5::compute(hash_input.as_bytes());
+            let hash_value = hash[0] as u16;
+            
+            // 閾値処理（調整パラメータを適用）
+            let intensity = ((hash_value as f32 * pattern_scale) as u8).min(255);
+            let is_black = intensity < adjustments.threshold;
+            
+            // ディザリング処理
+            let final_color = match dithering_type {
+                "floyd_steinberg" => {
+                    // フロイド・スタインバーグ・ディザリング（簡易版）
+                    let error = (intensity as i16 - if is_black { 0 } else { 255 }) * dithering_strength as i16 / 100;
+                    let adjusted = (intensity as i16 + error / 4).max(0).min(255) as u8;
+                    if adjusted < adjustments.threshold { Color::new(0, 0, 0, 255) } else { Color::new(255, 255, 255, 255) }
+                },
+                "ordered" => {
+                    // 組織化ディザリング（簡易版）
+                    let pattern = ((x % 4) + (y % 4) * 4) as u8 * 16;
+                    let adjusted = intensity.saturating_add(pattern / 4);
+                    if adjusted < adjustments.threshold { Color::new(0, 0, 0, 255) } else { Color::new(255, 255, 255, 255) }
+                },
+                _ => {
+                    // ディザリングなし
+                    if is_black { Color::new(0, 0, 0, 255) } else { Color::new(255, 255, 255, 255) }
+                }
+                            };
+                
+                let dot = Dot::new(final_color, 255);
+                let _ = canvas.set_dot(coord, dot);
+        }
+    }
+    
+    canvas
+}
+
+// API レスポンス型定義
+#[derive(Serialize, Deserialize)]
+struct ArtworkSummary {
+    id: String,
+    name: String,
+    format: String,
+    canvas_size: String,
+    total_dots: usize,
+    drawable_dots: usize,
+    completion_ratio: f64,
+    created_at: u64,
+    updated_at: u64,
+}
+
+#[derive(Serialize, Deserialize)]
+struct CreateArtworkRequest {
+    name: String,
+    description: Option<String>,
+    format: Option<String>,
+    width: u16,
+    height: u16,
+    dots: Vec<DotData>,
+}
+
+#[derive(Serialize, Deserialize)]
+struct DotData {
+    x: u16,
+    y: u16,
+    color: ColorData,
+}
+
+#[derive(Serialize, Deserialize)]
+struct ColorData {
+    r: u8,
+    g: u8,
+    b: u8,
+    a: u8,
+}
+
+#[derive(Serialize, Deserialize)]
+struct ArtworkResponse {
+    id: String,
+    message: String,
+    artwork: Option<Artwork>,
+}
+
+#[derive(Serialize, Deserialize)]
+struct PaintRequest {
+    speed: Option<f64>,
+    preview: Option<bool>,
+}
+
+#[derive(Serialize, Deserialize)]
+struct ApiResponse {
+    success: bool,
+    message: String,
+}
+
+#[derive(Serialize, Deserialize)]
+struct SystemInfo {
+    version: String,
+    rust_version: String,
+    os: String,
+    arch: String,
+    uptime_seconds: u64,
+}
+
+#[derive(Serialize, Deserialize)]
+struct HardwareStatus {
+    nintendo_switch_connected: bool,
+    usb_otg_available: bool,
+    hid_device_available: bool,
+    last_check: String,
+    details: HardwareDetails,
+}
+
+#[derive(Serialize, Deserialize)]
+struct HardwareDetails {
+    board_model: String,
+    usb_gadgets: Vec<String>,
+    hid_devices: Vec<String>,
+    dwc2_loaded: bool,
+    libcomposite_loaded: bool,
+}
+
+/// コマンドライン引数を解析
+fn parse_args() -> Result<(AppConfig, Command), AppError> {
+    let args: Vec<String> = env::args().collect();
+    
+    if args.len() < 2 {
+        return Ok((AppConfig::default(), Command::Help));
+    }
+
+    let mut config = AppConfig::default();
+    let mut command_args = Vec::new();
+    let mut i = 1;
+
+    // オプションを解析
+    while i < args.len() {
+        match args[i].as_str() {
+            "-v" | "--verbose" => {
+                config.verbose = true;
+                i += 1;
+            },
+            arg if arg.starts_with('-') && !arg.starts_with("--") => {
+                return Err(AppError::InvalidArgs {
+                    message: format!("Unknown option: {}", arg),
+                });
+            },
+            _ => {
+                // コマンド引数の開始
+                command_args.extend_from_slice(&args[i..]);
+                break;
+            }
+        }
+    }
+
+    // コマンドを解析
+    let command = if command_args.is_empty() {
+        Command::Help
+    } else {
+        match command_args[0].as_str() {
+            "help" | "-h" | "--help" => Command::Help,
+            "version" | "-V" | "--version" => Command::Version,
+            "serve" => {
+                let mut port = None;
+                let mut host = None;
+                
+                // ポートとホストのオプションを解析
+                let mut i = 1;
+                while i < command_args.len() {
+                    match command_args[i].as_str() {
+                        "--port" => {
+                            if i + 1 < command_args.len() {
+                                port = Some(command_args[i + 1].parse().map_err(|_| {
+                                    AppError::InvalidArgs {
+                                        message: "Invalid port number".to_string(),
+                                    }
+                                })?);
+                                i += 2;
+                            } else {
+                                return Err(AppError::InvalidArgs {
+                                    message: "--port requires a value".to_string(),
+                                });
+                            }
+                        },
+                        "--host" => {
+                            if i + 1 < command_args.len() {
+                                host = Some(command_args[i + 1].clone());
+                                i += 2;
+                            } else {
+                                return Err(AppError::InvalidArgs {
+                                    message: "--host requires a value".to_string(),
+                                });
+                            }
+                        },
+                        _ => i += 1,
+                    }
+                }
+                
+                Command::Serve { port, host }
+            },
+            "setup-gadget" => {
+                let force = command_args.contains(&"--force".to_string());
+                Command::SetupGadget { force }
+            },
+            unknown => {
+                return Err(AppError::InvalidArgs {
+                    message: format!("Unknown command: {}", unknown),
+                });
+            }
+        }
+    };
+
+    Ok((config, command))
+}
+
+/// メイン関数
+#[tokio::main]
+async fn main() {
+    // ログシステムを初期化
+    let debug_config = if env::var("RUST_ENV").unwrap_or_else(|_| "development".to_string()) == "production" {
+        DebugConfig::production()
+    } else {
+        DebugConfig::development()
+    };
+    
+    if let Err(e) = init_logging(&debug_config) {
+        eprintln!("ログシステムの初期化に失敗しました: {}", e);
+        process::exit(1);
+    }
+
+    // システム情報をログに出力
+    debug_helpers::log_system_info();
+
+    // コマンドライン引数を解析
+    let (config, command) = match parse_args() {
+        Ok((config, command)) => {
+            info!("コマンドライン引数を解析しました: {:?}", command);
+            (config, command)
+        },
+        Err(e) => {
+            error!("コマンドライン引数の解析に失敗しました: {}", e);
+            eprintln!("エラー: {}", e);
+            eprintln!("ヘルプを表示するには 'help' コマンドを使用してください");
+            process::exit(1);
+        }
+    };
+
+    // アプリケーションを実行
+    let app = App::new(config);
+    if let Err(e) = app.run(command).await {
+        debug_helpers::log_error_details(&e, "アプリケーション実行");
+        error!("アプリケーションの実行に失敗しました: {}", e);
+        eprintln!("エラー: {}", e);
+        process::exit(1);
+    }
+
+    info!("アプリケーションが正常に終了しました");
+}

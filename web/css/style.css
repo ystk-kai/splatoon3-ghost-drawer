@@ -1,0 +1,319 @@
+/* Splatoon3 Ghost Drawer - Custom Styles for Tailwind CSS */
+/* 
+ * ローカルフォントの設定
+ * assets/fonts/ ディレクトリにフォントファイルを配置して使用
+ */
+
+/* ローカルフォントの定義 */
+@font-face {
+    font-family: 'Splatoon1-common';
+    src: url('../assets/fonts/Splatoon1-common.woff2') format('woff2');
+    font-weight: normal;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'Splatoon2-common';
+    src: url('../assets/fonts/Splatoon2-common.woff2') format('woff2');
+    font-weight: normal;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'Splatoon1JP-hiragana-katakana';
+    src: url('../assets/fonts/Splatoon1JP-hiragana-katakana.woff2') format('woff2');
+    font-weight: normal;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'Splatoon2JP-hiragana-katakana';
+    src: url('../assets/fonts/Splatoon2JP-hiragana-katakana.woff2') format('woff2');
+    font-weight: normal;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'Splatoon1JP-level1';
+    src: url('../assets/fonts/Splatoon1JP-level1.woff2') format('woff2');
+    font-weight: normal;
+    font-style: normal;
+    font-display: swap;
+}
+
+/* Tailwind CSSで使用するカスタムスタイル */
+.upload-area.dragover {
+    @apply border-splatoon-blue bg-gray-600;
+}
+
+/* 接続状態のスタイル */
+.connection-status.connected #statusIndicator {
+    @apply bg-green-500;
+}
+
+.connection-status.disconnected #statusIndicator {
+    @apply bg-red-500;
+}
+
+/* ログエリアのカスタムスタイル */
+.log-entry {
+    @apply mb-2 leading-relaxed;
+}
+
+.log-entry.info {
+    @apply text-blue-400;
+}
+
+.log-entry.success {
+    @apply text-green-400;
+}
+
+.log-entry.warning {
+    @apply text-yellow-400;
+}
+
+.log-entry.error {
+    @apply text-red-400;
+}
+
+/* システム情報のステータス色（ダークモード対応） */
+.status-connected {
+    @apply text-green-400 bg-green-900 px-2 py-1 rounded-full text-xs;
+}
+
+.status-disconnected {
+    @apply text-red-400 bg-red-900 px-2 py-1 rounded-full text-xs;
+}
+
+.status-error {
+    @apply text-red-400 bg-red-900 px-2 py-1 rounded-full text-xs;
+}
+
+/* Splatoonスタイルのフォント設定 */
+h1, h2, h3, h4, h5, h6, .heading {
+    font-family: 'Splatoon1JP-level1', 'Splatoon2-common', 'Splatoon1-common', 'Splatoon2JP-hiragana-katakana', 'Splatoon1JP-hiragana-katakana', system-ui, sans-serif !important;
+    font-weight: normal;
+}
+
+/* メインタイトル用の特別なスタイル（英語メイン） */
+.main-title {
+    font-family: 'Splatoon1-common', 'Splatoon2-common', system-ui, sans-serif !important;
+    letter-spacing: 0.05em;
+    font-weight: normal;
+}
+
+/* 日本語見出し用のスタイル（漢字対応） */
+.heading-jp {
+    font-family: 'Splatoon1JP-level1', 'Splatoon2JP-hiragana-katakana', 'Splatoon1JP-hiragana-katakana', 'Splatoon2-common', 'Splatoon1-common', system-ui, sans-serif !important;
+    font-weight: normal;
+}
+
+/* レンジスライダーのカスタムスタイル（ダークモード対応） */
+input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    @apply bg-gray-700;
+}
+
+input[type="range"]::-webkit-slider-track {
+    @apply bg-gray-700 h-2 rounded-lg;
+}
+
+input[type="range"]::-moz-range-track {
+    @apply bg-gray-700 h-2 rounded-lg;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    @apply w-4 h-4 bg-splatoon-blue rounded-full cursor-pointer;
+}
+
+input[type="range"]::-moz-range-thumb {
+    @apply w-4 h-4 bg-splatoon-blue rounded-full cursor-pointer border-0;
+}
+
+/* プレビューエリアのアニメーション */
+.preview-show {
+    animation: slideIn 0.3s ease-out;
+}
+
+/* 画像変換エリアのスタイル */
+.image-area-transition {
+    transition: all 0.3s ease-out;
+}
+
+.converted-canvas {
+    max-width: 100%;
+    height: auto;
+    image-rendering: pixelated;
+    image-rendering: -moz-crisp-edges;
+    image-rendering: crisp-edges;
+}
+
+/* アップロードエリアのホバー効果 */
+#uploadArea:hover {
+    @apply border-splatoon-blue bg-blue-50;
+}
+
+#uploadArea.dragover {
+    @apply border-splatoon-blue bg-blue-100 border-solid;
+}
+
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* プログレスバーのアニメーション */
+.progress-fill {
+    transition: width 0.3s ease-out;
+}
+
+/* スクロールバーのカスタマイズ（ダークモード） */
+#logArea::-webkit-scrollbar {
+    width: 6px;
+}
+
+#logArea::-webkit-scrollbar-track {
+    @apply bg-gray-800 rounded;
+}
+
+#logArea::-webkit-scrollbar-thumb {
+    @apply bg-gray-600 rounded;
+}
+
+#logArea::-webkit-scrollbar-thumb:hover {
+    @apply bg-gray-500;
+}
+
+/* スライダーのカスタマイズ */
+input[type="range"].slider {
+    -webkit-appearance: none;
+    appearance: none;
+    outline: none;
+    opacity: 0.8;
+    transition: opacity 0.2s;
+}
+
+input[type="range"].slider:hover {
+    opacity: 1;
+}
+
+input[type="range"].slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 20px;
+    height: 20px;
+    background: #F5D800; /* Splatoon yellow */
+    cursor: pointer;
+    border-radius: 50%;
+    border: 2px solid #1f2937; /* gray-800 */
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+input[type="range"].slider::-moz-range-thumb {
+    width: 20px;
+    height: 20px;
+    background: #F5D800; /* Splatoon yellow */
+    cursor: pointer;
+    border-radius: 50%;
+    border: 2px solid #1f2937; /* gray-800 */
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+input[type="range"].slider::-webkit-slider-thumb:hover {
+    background: #FFE600;
+    transform: scale(1.1);
+}
+
+input[type="range"].slider::-moz-range-thumb:hover {
+    background: #FFE600;
+    transform: scale(1.1);
+}
+
+/* 切り取りオーバーレイ */
+#cropOverlay {
+    z-index: 10;
+}
+
+.crop-active {
+    border: 2px solid #F5D800 !important;
+}
+
+.crop-selection {
+    position: absolute;
+    border: 2px solid #F5D800;
+    background-color: rgba(245, 216, 0, 0.2);
+    pointer-events: none;
+}
+
+.crop-handle {
+    position: absolute;
+    width: 8px;
+    height: 8px;
+    background-color: #F5D800;
+    border: 1px solid #1f2937;
+    pointer-events: auto;
+}
+
+.crop-handle:hover {
+    background-color: #FFE600;
+    transform: scale(1.2);
+}
+
+.crop-handle.nw { top: -4px; left: -4px; cursor: nw-resize; }
+.crop-handle.ne { top: -4px; right: -4px; cursor: ne-resize; }
+.crop-handle.sw { bottom: -4px; left: -4px; cursor: sw-resize; }
+.crop-handle.se { bottom: -4px; right: -4px; cursor: se-resize; }
+.crop-handle.n { top: -4px; left: 50%; transform: translateX(-50%); cursor: n-resize; }
+.crop-handle.s { bottom: -4px; left: 50%; transform: translateX(-50%); cursor: s-resize; }
+.crop-handle.w { left: -4px; top: 50%; transform: translateY(-50%); cursor: w-resize; }
+.crop-handle.e { right: -4px; top: 50%; transform: translateY(-50%); cursor: e-resize; }
+
+/* ペンカーソル */
+#paintingCursor {
+    transition: all 0.1s ease-out;
+    box-shadow: 0 0 10px rgba(245, 216, 0, 0.8);
+}
+
+#paintingCursor.pen-up {
+    width: 12px;
+    height: 12px;
+    background-color: #FF6600; /* オレンジ色でペンアップ状態を表現 */
+    opacity: 0.7;
+}
+
+#paintingCursor.pen-down {
+    width: 8px;
+    height: 8px;
+    background-color: #F5D800; /* 黄色でペンダウン状態を表現 */
+    opacity: 1;
+}
+
+/* 倍速ボタンのアクティブ状態 */
+.speed-multiplier-btn.active {
+    background-color: #F5D800 !important;
+    color: #1f2937 !important;
+    border-color: #F5D800 !important;
+}
+
+/* トグルスイッチのホバー効果 */
+label[for="previewModeToggle"]:hover .peer:not(:checked) ~ div:first-of-type {
+    background-color: #4B5563; /* gray-600 hover */
+}
+
+label[for="previewModeToggle"]:hover .peer:checked ~ div:first-of-type {
+    background-color: #0052A3; /* darker blue on hover */
+}

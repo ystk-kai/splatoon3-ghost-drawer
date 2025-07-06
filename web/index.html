@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Splatoon3 Ghost Drawer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="icon"
+        href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎨</text></svg>">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        'splatoon': ['Splatoon1-common', 'Splatoon2-common', 'system-ui', 'sans-serif'],
+                        'splatoon-jp': ['Splatoon1JP-level1', 'Splatoon2JP-hiragana-katakana', 'Splatoon1JP-hiragana-katakana', 'system-ui', 'sans-serif'],
+                        'system': ['system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'sans-serif']
+                    },
+                    colors: {
+                        'splatoon': {
+                            'yellow': '#F5D800',
+                            'blue': '#0066CC',
+                            'orange': '#FF6600',
+                            'green': '#00CC66',
+                            'purple': '#9966CC',
+                            'pink': '#FF3399'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+
+<body class="bg-gray-900 font-system text-gray-100">
+    <header class="bg-gray-800 shadow-lg border-b border-gray-700">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center h-16">
+                <div class="flex items-center space-x-3">
+                    <img src="assets/splatoon3_ghost_drawer_logo.png" alt="Splatoon3 Ghost Drawer Logo"
+                        class="h-10 w-10">
+                    <h1 class="text-2xl font-bold font-splatoon main-title text-splatoon-yellow">Splatoon3 Ghost Drawer
+                    </h1>
+                </div>
+                <div class="flex items-center space-x-2">
+                    <div class="flex items-center space-x-2 px-3 py-1 rounded-full text-sm font-medium"
+                        id="connectionStatus">
+                        <div class="w-2 h-2 rounded-full" id="statusIndicator"></div>
+                        <span id="connectionText">接続確認中...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <!-- 画像変換エリア -->
+        <section class="bg-gray-800 rounded-lg shadow-lg border border-gray-700 p-6 mb-8">
+            <h2 class="text-xl font-bold font-splatoon-jp heading heading-jp text-splatoon-yellow mb-6">ガゾウヘンカン</h2>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <!-- 変換前 -->
+                <div class="space-y-4">
+                    <h3 class="text-lg font-semibold font-splatoon-jp heading heading-jp text-gray-200">変換前</h3>
+
+                    <div class="border-2 border-dashed border-gray-600 rounded-lg p-8 text-center hover:border-splatoon-blue transition-colors cursor-pointer min-h-[300px] flex items-center justify-center bg-gray-700"
+                        id="uploadArea">
+                        <div class="space-y-4">
+                            <div class="text-gray-400">
+                                <svg class="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none"
+                                    viewBox="0 0 48 48">
+                                    <path
+                                        d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02"
+                                        stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                                </svg>
+                            </div>
+                            <div>
+                                <p class="text-lg text-gray-300">画像をドラッグ&ドロップ</p>
+                                <p class="text-sm text-gray-400 mt-2">PNG, JPG, GIF, BMP (最大10MB)</p>
+                            </div>
+                            <button
+                                class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-splatoon-blue hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
+                                id="uploadButton">
+                                <svg class="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                                </svg>
+                                ファイルを選択
+                            </button>
+                        </div>
+                        <input type="file" id="fileInput" accept="image/*" class="hidden">
+                    </div>
+
+                    <div class="hidden" id="originalImageArea">
+                        <div class="bg-gray-700 rounded-lg p-4">
+                            <div class="relative inline-block" id="imageContainer">
+                                <img id="originalImage" class="max-w-full h-auto rounded-lg shadow-sm mx-auto"
+                                    alt="元画像">
+                                <canvas id="cropOverlay"
+                                    class="absolute top-0 left-0 rounded-lg cursor-crosshair hidden"
+                                    style="pointer-events: auto;"></canvas>
+                            </div>
+                            <div class="mt-3 text-center">
+                                <p class="text-sm text-gray-400" id="originalImageDetails"></p>
+                                <div class="flex justify-center gap-2 mt-3">
+                                    <button
+                                        class="inline-flex items-center px-3 py-1 border border-gray-500 text-xs font-medium rounded text-gray-300 bg-gray-700 hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-splatoon-blue transition-colors"
+                                        id="cropButton">
+                                        <svg class="mr-1 h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                                        </svg>
+                                        切り取り
+                                    </button>
+                                    <button
+                                        class="inline-flex items-center px-3 py-1 border border-gray-500 text-xs font-medium rounded text-gray-300 bg-gray-700 hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-splatoon-blue transition-colors"
+                                        id="changeImageButton">
+                                        <svg class="mr-1 h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                        </svg>
+                                        画像を変更
+                                    </button>
+                                    <button
+                                        class="inline-flex items-center px-3 py-1 border border-transparent text-xs font-medium rounded text-white bg-splatoon-blue hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
+                                        id="convertButton">
+                                        <svg class="mr-1 h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                        </svg>
+                                        変換開始
+                                    </button>
+                                </div>
+                                <div id="cropInfo" class="hidden mt-2 text-xs text-splatoon-yellow">
+                                    ドラッグして範囲を選択
+                                </div>
+                                <button
+                                    class="hidden mt-2 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-splatoon-green hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors"
+                                    id="applyCropButton">
+                                    <svg class="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M5 13l4 4L19 7" />
+                                    </svg>
+                                    切り取りを適用
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 変換後 -->
+                <div class="space-y-4">
+                    <h3 class="text-lg font-semibold font-splatoon-jp heading heading-jp text-gray-200">変換後</h3>
+
+                    <div class="border-2 border-gray-600 rounded-lg p-8 text-center min-h-[300px] flex items-center justify-center bg-gray-700"
+                        id="convertedArea">
+                        <div class="space-y-4">
+                            <div class="text-gray-400">
+                                <svg class="mx-auto h-12 w-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                </svg>
+                            </div>
+                            <p class="text-gray-400">画像をアップロードすると自動的に変換されます</p>
+                        </div>
+                    </div>
+
+                    <div class="hidden" id="convertedImageArea">
+                        <div class="bg-gray-700 rounded-lg p-4">
+                            <canvas id="convertedCanvas"
+                                class="max-w-full h-auto rounded-lg shadow-sm mx-auto border border-gray-600"></canvas>
+                            <div class="mt-3 text-center space-y-2">
+                                <p class="text-sm text-gray-400" id="convertedImageDetails"></p>
+                                <div class="flex justify-center gap-4">
+                                    <button
+                                        class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-splatoon-green hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                        id="paintButton" disabled>
+                                        <svg class="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zM7 3V1m0 20v-2m8-10h2m-2 4h2m-2 4h2m-2-8h2" />
+                                        </svg>
+                                        描画開始
+                                    </button>
+                                    <button
+                                        class="inline-flex items-center px-4 py-2 border border-gray-500 text-sm font-medium rounded-md text-gray-300 bg-gray-700 hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-splatoon-blue transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                        id="downloadButton" disabled>
+                                        <svg class="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                        </svg>
+                                        ダウンロード
+                                    </button>
+                                    <button
+                                        class="inline-flex items-center px-4 py-2 border border-red-500 text-sm font-medium rounded-md text-red-400 bg-transparent hover:bg-red-900 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors"
+                                        id="clearButton">
+                                        <svg class="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                        </svg>
+                                        クリア
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 画像調整パネル -->
+            <div class="mt-8 hidden" id="adjustmentPanel">
+                <h3 class="text-lg font-semibold font-splatoon-jp heading heading-jp text-gray-200 mb-4">画像調整</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <!-- 露出 -->
+                    <div class="bg-gray-700 rounded-lg p-4">
+                        <div class="flex items-center justify-between mb-2">
+                            <label for="exposureSlider" class="text-sm font-medium text-gray-300">露出</label>
+                            <span id="exposureValue" class="text-sm font-semibold text-splatoon-yellow">0.0</span>
+                        </div>
+                        <input type="range" id="exposureSlider" min="-2.0" max="2.0" value="0.0" step="0.1"
+                            class="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer slider">
+                        <div class="flex justify-between text-xs text-gray-400 mt-1">
+                            <span>-2.0</span>
+                            <span>0</span>
+                            <span>+2.0</span>
+                        </div>
+                    </div>
+
+                    <!-- 明るさ -->
+                    <div class="bg-gray-700 rounded-lg p-4">
+                        <div class="flex items-center justify-between mb-2">
+                            <label for="brightnessSlider" class="text-sm font-medium text-gray-300">明るさ</label>
+                            <span id="brightnessValue" class="text-sm font-semibold text-splatoon-yellow">0</span>
+                        </div>
+                        <input type="range" id="brightnessSlider" min="-100" max="100" value="0" step="1"
+                            class="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer slider">
+                        <div class="flex justify-between text-xs text-gray-400 mt-1">
+                            <span>-100</span>
+                            <span>0</span>
+                            <span>+100</span>
+                        </div>
+                    </div>
+
+                    <!-- コントラスト -->
+                    <div class="bg-gray-700 rounded-lg p-4">
+                        <div class="flex items-center justify-between mb-2">
+                            <label for="contrastSlider" class="text-sm font-medium text-gray-300">コントラスト</label>
+                            <span id="contrastValue" class="text-sm font-semibold text-splatoon-yellow">0</span>
+                        </div>
+                        <input type="range" id="contrastSlider" min="-100" max="100" value="0" step="1"
+                            class="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer slider">
+                        <div class="flex justify-between text-xs text-gray-400 mt-1">
+                            <span>-100</span>
+                            <span>0</span>
+                            <span>+100</span>
+                        </div>
+                    </div>
+
+                    <!-- ハイライト -->
+                    <div class="bg-gray-700 rounded-lg p-4">
+                        <div class="flex items-center justify-between mb-2">
+                            <label for="highlightsSlider" class="text-sm font-medium text-gray-300">ハイライト</label>
+                            <span id="highlightsValue" class="text-sm font-semibold text-splatoon-yellow">0</span>
+                        </div>
+                        <input type="range" id="highlightsSlider" min="-100" max="100" value="0" step="1"
+                            class="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer slider">
+                        <div class="flex justify-between text-xs text-gray-400 mt-1">
+                            <span>-100</span>
+                            <span>0</span>
+                            <span>+100</span>
+                        </div>
+                    </div>
+
+                    <!-- シャドウ -->
+                    <div class="bg-gray-700 rounded-lg p-4">
+                        <div class="flex items-center justify-between mb-2">
+                            <label for="shadowsSlider" class="text-sm font-medium text-gray-300">シャドウ</label>
+                            <span id="shadowsValue" class="text-sm font-semibold text-splatoon-yellow">0</span>
+                        </div>
+                        <input type="range" id="shadowsSlider" min="-100" max="100" value="0" step="1"
+                            class="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer slider">
+                        <div class="flex justify-between text-xs text-gray-400 mt-1">
+                            <span>-100</span>
+                            <span>0</span>
+                            <span>+100</span>
+                        </div>
+                    </div>
+
+                    <!-- ガンマ補正 -->
+                    <div class="bg-gray-700 rounded-lg p-4">
+                        <div class="flex items-center justify-between mb-2">
+                            <label for="gammaSlider" class="text-sm font-medium text-gray-300">ガンマ補正</label>
+                            <span id="gammaValue" class="text-sm font-semibold text-splatoon-yellow">1.0</span>
+                        </div>
+                        <input type="range" id="gammaSlider" min="0.1" max="3.0" value="1.0" step="0.1"
+                            class="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer slider">
+                        <div class="flex justify-between text-xs text-gray-400 mt-1">
+                            <span>0.1</span>
+                            <span>1.5</span>
+                            <span>3.0</span>
+                        </div>
+                    </div>
+
+                    <!-- ブラックポイント -->
+                    <div class="bg-gray-700 rounded-lg p-4">
+                        <div class="flex items-center justify-between mb-2">
+                            <label for="blackPointSlider" class="text-sm font-medium text-gray-300">ブラックポイント</label>
+                            <span id="blackPointValue" class="text-sm font-semibold text-splatoon-yellow">0</span>
+                        </div>
+                        <input type="range" id="blackPointSlider" min="0" max="255" value="0" step="1"
+                            class="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer slider">
+                        <div class="flex justify-between text-xs text-gray-400 mt-1">
+                            <span>0</span>
+                            <span>128</span>
+                            <span>255</span>
+                        </div>
+                    </div>
+
+                    <!-- ホワイトポイント -->
+                    <div class="bg-gray-700 rounded-lg p-4">
+                        <div class="flex items-center justify-between mb-2">
+                            <label for="whitePointSlider" class="text-sm font-medium text-gray-300">ホワイトポイント</label>
+                            <span id="whitePointValue" class="text-sm font-semibold text-splatoon-yellow">255</span>
+                        </div>
+                        <input type="range" id="whitePointSlider" min="0" max="255" value="255" step="1"
+                            class="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer slider">
+                        <div class="flex justify-between text-xs text-gray-400 mt-1">
+                            <span>0</span>
+                            <span>128</span>
+                            <span>255</span>
+                        </div>
+                    </div>
+
+                    <!-- 2値化閾値 -->
+                    <div class="bg-gray-700 rounded-lg p-4">
+                        <div class="flex items-center justify-between mb-2">
+                            <label for="thresholdSlider" class="text-sm font-medium text-gray-300">2値化閾値</label>
+                            <span id="thresholdValue" class="text-sm font-semibold text-splatoon-yellow">128</span>
+                        </div>
+                        <input type="range" id="thresholdSlider" min="0" max="255" value="128" step="1"
+                            class="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer slider"
+                            style="background: linear-gradient(to right, #000 0%, #000 50%, #fff 50%, #fff 100%);">
+                        <div class="flex justify-between text-xs text-gray-400 mt-1">
+                            <span>黒く変換</span>
+                            <span class="text-center">128</span>
+                            <span>白く変換</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- プレビューモード設定 -->
+                <div class="mt-4 bg-gray-700 rounded-lg p-4">
+                    <div class="flex items-center justify-between">
+                        <label for="previewModeToggle" class="text-sm font-medium text-gray-300">2値化前プレビュー</label>
+                        <label for="previewModeToggle" class="relative inline-block cursor-pointer">
+                            <input type="checkbox" id="previewModeToggle" class="sr-only peer">
+                            <div class="block bg-gray-600 w-14 h-8 rounded-full transition-colors duration-300 peer-checked:bg-splatoon-blue"></div>
+                            <div class="dot absolute left-1 top-1 bg-white w-6 h-6 rounded-full transition-transform duration-300 peer-checked:translate-x-6 peer-checked:bg-splatoon-yellow"></div>
+                        </label>
+                    </div>
+                    <p class="text-xs text-gray-400 mt-2">調整効果を確認するために、2値化前の画像を表示します</p>
+                </div>
+
+                <!-- リセットボタン -->
+                <div class="mt-4 text-center">
+                    <button id="resetAdjustmentsButton"
+                        class="inline-flex items-center px-4 py-2 border border-gray-500 text-sm font-medium rounded-md text-gray-300 bg-gray-700 hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-splatoon-blue transition-colors">
+                        <svg class="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                        調整をリセット
+                    </button>
+                </div>
+            </div>
+
+            <!-- 描画進捗表示 -->
+            <div class="mt-8 hidden" id="paintingProgress">
+                <h3 class="text-lg font-semibold font-splatoon-jp heading heading-jp text-gray-200 mb-4">描画進捗</h3>
+                <div class="bg-gray-700 rounded-lg p-4">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                        <!-- 描画プレビュー -->
+                        <div>
+                            <p class="text-sm text-gray-300 mb-2">描画プレビュー</p>
+                            <div class="relative bg-black rounded-lg overflow-hidden" style="aspect-ratio: 8/3;">
+                                <canvas id="paintingCanvas" class="w-full h-full"></canvas>
+                                <div id="paintingCursor"
+                                    class="absolute w-2 h-2 bg-splatoon-yellow rounded-full pointer-events-none hidden"
+                                    style="transform: translate(-50%, -50%);"></div>
+                            </div>
+                        </div>
+
+                        <!-- 描画情報 -->
+                        <div>
+                            <p class="text-sm text-gray-300 mb-2">描画情報</p>
+                            <div class="space-y-2 text-sm">
+                                <div class="flex justify-between">
+                                    <span class="text-gray-400">総ドット数:</span>
+                                    <span id="totalDots" class="text-gray-200">-</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-gray-400">描画済み:</span>
+                                    <span id="paintedDots" class="text-gray-200">-</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-gray-400">スキップ（白）:</span>
+                                    <span id="skippedDots" class="text-gray-200">-</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-gray-400">推定時間:</span>
+                                    <span id="estimatedTime" class="text-gray-200">-</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-gray-400">経過時間:</span>
+                                    <span id="elapsedTime" class="text-gray-200">-</span>
+                                </div>
+                                <div class="flex justify-between mt-2 pt-2 border-t border-gray-600">
+                                    <span class="text-gray-400">十字キー操作:</span>
+                                    <span id="dpadOperations" class="text-gray-200">-</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-gray-400">Aボタン押下:</span>
+                                    <span id="aButtonPresses" class="text-gray-200">-</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- キー操作速度調整 -->
+                    <div class="mt-4 pt-4 border-t border-gray-600">
+                        <div class="flex items-center justify-between mb-2">
+                            <label for="operationSpeedSlider" class="text-sm font-medium text-gray-300">キー操作速度（ドット/秒）</label>
+                            <span id="operationSpeedValue" class="text-sm font-semibold text-splatoon-yellow">2.0</span>
+                        </div>
+                        <input type="range" id="operationSpeedSlider" min="0.5" max="5.0" value="2.0" step="0.1"
+                            class="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer slider">
+                        <div class="flex justify-between text-xs text-gray-400 mt-1">
+                            <span>0.5 (遅い)</span>
+                            <span>2.0 (標準)</span>
+                            <span>5.0 (速い)</span>
+                        </div>
+                        <p class="text-xs text-gray-500 mt-2">※ コントローラーの反応に合わせて調整してください</p>
+                    </div>
+
+                    <!-- 進捗スライダー（シミュレーション時のみ） -->
+                    <div class="mt-4 pt-4 border-t border-gray-600 hidden" id="progressSliderControl">
+                        <div class="flex items-center justify-between mb-2">
+                            <label for="progressSlider" class="text-sm font-medium text-gray-300">描画進捗</label>
+                            <span id="progressSliderValue" class="text-sm font-semibold text-splatoon-yellow">0%</span>
+                        </div>
+                        <input type="range" id="progressSlider" min="0" max="100" value="0" step="0.1"
+                            class="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer slider">
+                        <div class="flex justify-between text-xs text-gray-400 mt-1">
+                            <span>0%</span>
+                            <span>25%</span>
+                            <span>50%</span>
+                            <span>75%</span>
+                            <span>100%</span>
+                        </div>
+                    </div>
+
+                    <!-- シミュレーション倍速（Nintendo Switch未接続時のみ表示） -->
+                    <div id="simulationSpeedControl" class="mt-4 hidden">
+                        <p class="text-sm font-medium text-gray-300 mb-2">シミュレーション倍速</p>
+                        <div class="flex gap-2 flex-wrap">
+                            <button
+                                class="speed-multiplier-btn px-3 py-1 text-sm font-medium rounded-md border border-gray-500 text-gray-300 bg-gray-700 hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-splatoon-blue transition-colors"
+                                data-speed="1">1x</button>
+                            <button
+                                class="speed-multiplier-btn px-3 py-1 text-sm font-medium rounded-md border border-gray-500 text-gray-300 bg-gray-700 hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-splatoon-blue transition-colors"
+                                data-speed="2">2x</button>
+                            <button
+                                class="speed-multiplier-btn px-3 py-1 text-sm font-medium rounded-md border border-gray-500 text-gray-300 bg-gray-700 hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-splatoon-blue transition-colors"
+                                data-speed="5">5x</button>
+                            <button
+                                class="speed-multiplier-btn px-3 py-1 text-sm font-medium rounded-md border border-gray-500 text-gray-300 bg-gray-700 hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-splatoon-blue transition-colors"
+                                data-speed="10">10x</button>
+                            <button
+                                class="speed-multiplier-btn px-3 py-1 text-sm font-medium rounded-md border border-gray-500 text-gray-300 bg-gray-700 hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-splatoon-blue transition-colors"
+                                data-speed="25">25x</button>
+                            <button
+                                class="speed-multiplier-btn px-3 py-1 text-sm font-medium rounded-md border border-gray-500 text-gray-300 bg-gray-700 hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-splatoon-blue transition-colors"
+                                data-speed="50">50x</button>
+                            <button
+                                class="speed-multiplier-btn px-3 py-1 text-sm font-medium rounded-md border border-gray-500 text-gray-300 bg-gray-700 hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-splatoon-blue transition-colors"
+                                data-speed="100">100x</button>
+                        </div>
+                    </div>
+
+                    <!-- 描画制御ボタン -->
+                    <div class="flex justify-center gap-4 mt-4">
+                        <button id="pausePaintingButton"
+                            class="inline-flex items-center px-4 py-2 border border-gray-500 text-sm font-medium rounded-md text-gray-300 bg-gray-700 hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-splatoon-blue transition-colors">
+                            <svg class="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            一時停止
+                        </button>
+                        <button id="stopPaintingButton"
+                            class="inline-flex items-center px-4 py-2 border border-red-500 text-sm font-medium rounded-md text-red-400 bg-transparent hover:bg-red-900 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors">
+                            <svg class="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />
+                            </svg>
+                            停止
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- プログレスバー -->
+            <div class="mt-6 hidden" id="progressContainer">
+                <div class="bg-gray-700 rounded-full h-2 overflow-hidden">
+                    <div class="bg-splatoon-blue h-2 rounded-full transition-all duration-300 ease-out"
+                        id="progressFill" style="width: 0%"></div>
+                </div>
+                <p class="text-sm text-gray-400 mt-2" id="progressText">準備中...</p>
+            </div>
+        </section>
+
+        <section class="bg-gray-800 rounded-lg shadow-lg border border-gray-700 p-6 mb-8">
+            <h2 class="text-xl font-bold font-splatoon-jp heading heading-jp text-splatoon-yellow mb-6">システム</h2>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div class="bg-gray-700 rounded-lg p-4">
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm font-medium text-gray-400">サーバー接続</span>
+                        <span class="text-sm font-semibold" id="serverStatus">確認中...</span>
+                    </div>
+                </div>
+
+                <div class="bg-gray-700 rounded-lg p-4">
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm font-medium text-gray-400">Nintendo Switch</span>
+                        <span class="text-sm font-semibold" id="switchStatus">確認中...</span>
+                    </div>
+                </div>
+
+                <div class="bg-gray-700 rounded-lg p-4">
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm font-medium text-gray-400">USB OTG</span>
+                        <span class="text-sm font-semibold" id="usbStatus">確認中...</span>
+                    </div>
+                </div>
+
+                <div class="bg-gray-700 rounded-lg p-4">
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm font-medium text-gray-400">HIDデバイス</span>
+                        <span class="text-sm font-semibold" id="hidStatus">確認中...</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="bg-gray-800 rounded-lg shadow-lg border border-gray-700 p-6">
+            <div class="flex items-center justify-between mb-6">
+                <h2 class="text-xl font-bold font-splatoon-jp heading heading-jp text-splatoon-yellow">ログ</h2>
+                <div class="flex space-x-2">
+                    <button
+                        class="inline-flex items-center px-3 py-1 border border-gray-600 text-xs font-medium rounded text-gray-300 bg-gray-700 hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-splatoon-blue transition-colors"
+                        id="clearLogButton">
+                        <svg class="mr-1 h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                        クリア
+                    </button>
+                    <button
+                        class="inline-flex items-center px-3 py-1 border border-gray-600 text-xs font-medium rounded text-gray-300 bg-gray-700 hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-splatoon-blue transition-colors"
+                        id="downloadLogButton">
+                        <svg class="mr-1 h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                        ダウンロード
+                    </button>
+                </div>
+            </div>
+
+            <div class="bg-black rounded-lg p-4 h-64 overflow-y-auto font-mono text-sm" id="logArea">
+                <div class="text-blue-400 mb-2">
+                    <span class="text-gray-500">[2024-01-01 12:00:00]</span>
+                    <span class="ml-2">システムを初期化しています...</span>
+                </div>
+                <div class="text-green-400">
+                    <span class="text-gray-500">[2024-01-01 12:00:01]</span>
+                    <span class="ml-2">Webサーバーが起動しました</span>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer class="bg-gray-800 text-gray-300 mt-16 border-t border-gray-700">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            <div class="text-center">
+                <p class="text-sm font-splatoon text-splatoon-yellow">Splatoon3 Ghost Drawer.</p>
+            </div>
+        </div>
+    </footer>
+
+    <script src="js/image-processor.js"></script>
+    <script src="js/app.js"></script>
+    <script src="js/debug.js"></script>
+</body>
+
+</html>
