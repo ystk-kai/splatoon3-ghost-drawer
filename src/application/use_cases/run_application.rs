@@ -4,9 +4,15 @@ pub struct RunApplicationUseCase {
     // Dependencies for the application would be injected here
 }
 
+impl Default for RunApplicationUseCase {
+    fn default() -> Self {
+        Self {}
+    }
+}
+
 impl RunApplicationUseCase {
     pub fn new() -> Self {
-        Self {}
+        Self::default()
     }
 
     pub async fn execute(&self, host: String, port: u16) -> anyhow::Result<()> {

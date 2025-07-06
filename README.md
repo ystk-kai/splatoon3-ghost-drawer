@@ -125,21 +125,37 @@ splatoon3-ghost-drawer run
 
 #### CLIコマンド
 
+このアプリケーションは3つのコマンドをサポートしています：
+
+##### `setup` - システムセットアップ
+```bash
+# USB Gadgetモードの設定とsystemdサービスの登録（要root権限）
+sudo splatoon3-ghost-drawer setup
+
+# 強制的に再セットアップ（既存の設定を上書き）
+sudo splatoon3-ghost-drawer setup --force
+```
+
+##### `run` - アプリケーション実行
+```bash
+# Webサーバーの起動（デフォルト: 0.0.0.0:8080）
+splatoon3-ghost-drawer run
+
+# カスタムホストとポートで起動
+splatoon3-ghost-drawer run --host 127.0.0.1 --port 3000
+
+# すべてのインターフェースで特定のポートで起動
+splatoon3-ghost-drawer run --port 8888
+```
+
+##### ヘルプとバージョン
 ```bash
 # ヘルプの表示
 splatoon3-ghost-drawer --help
+splatoon3-ghost-drawer <command> --help
 
-# システムセットアップ（初回のみ）
-sudo splatoon3-ghost-drawer setup
-
-# 強制的に再セットアップ
-sudo splatoon3-ghost-drawer setup --force
-
-# Webサーバーの起動
-splatoon3-ghost-drawer run
-
-# カスタム設定でサーバー起動
-splatoon3-ghost-drawer run --host 0.0.0.0 --port 8080
+# バージョンの表示
+splatoon3-ghost-drawer --version
 ```
 
 #### Web UIの使用
@@ -179,7 +195,7 @@ sudo systemctl status splatoon3-gadget.service
 # カーネルモジュールの確認
 lsmod | grep -E "dwc2|libcomposite"
 
-# 手動でUSB Gadgetを設定
+# 手動でUSB Gadgetを設定（通常はsystemdが自動実行）
 sudo splatoon3-ghost-drawer _internal_configure_gadget
 ```
 

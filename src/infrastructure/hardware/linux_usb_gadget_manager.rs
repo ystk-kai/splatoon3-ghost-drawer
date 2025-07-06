@@ -12,9 +12,15 @@ const PID: &str = "0x2009"; // Pro Controller
 
 pub struct LinuxUsbGadgetManager;
 
+impl Default for LinuxUsbGadgetManager {
+    fn default() -> Self {
+        Self
+    }
+}
+
 impl LinuxUsbGadgetManager {
     pub fn new() -> Self {
-        Self
+        Self::default()
     }
 
     fn write_file(&self, path: &str, content: &str) -> Result<(), SetupError> {
@@ -90,7 +96,7 @@ impl UsbGadgetManager for LinuxUsbGadgetManager {
         if !Path::new("/sys/kernel/config/usb_gadget").exists() {
             info!("Mounting configfs...");
             let output = Command::new("mount")
-                .args(&["-t", "configfs", "none", "/sys/kernel/config"])
+                .args(["-t", "configfs", "none", "/sys/kernel/config"])
                 .output()
                 .map_err(|e| {
                     SetupError::Unknown(format!("Failed to mount configfs: {}", e))

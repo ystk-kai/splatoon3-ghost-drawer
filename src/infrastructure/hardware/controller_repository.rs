@@ -9,11 +9,17 @@ pub struct InMemoryControllerRepository {
     controllers: Arc<RwLock<HashMap<String, ProController>>>,
 }
 
-impl InMemoryControllerRepository {
-    pub fn new() -> Self {
+impl Default for InMemoryControllerRepository {
+    fn default() -> Self {
         Self {
             controllers: Arc::new(RwLock::new(HashMap::new())),
         }
+    }
+}
+
+impl InMemoryControllerRepository {
+    pub fn new() -> Self {
+        Self::default()
     }
 }
 
@@ -86,11 +92,17 @@ pub struct InMemorySessionRepository {
     sessions: Arc<RwLock<HashMap<String, ControllerSession>>>,
 }
 
-impl InMemorySessionRepository {
-    pub fn new() -> Self {
+impl Default for InMemorySessionRepository {
+    fn default() -> Self {
         Self {
             sessions: Arc::new(RwLock::new(HashMap::new())),
         }
+    }
+}
+
+impl InMemorySessionRepository {
+    pub fn new() -> Self {
+        Self::default()
     }
 }
 

@@ -9,9 +9,15 @@ const SERVICE_FILE: &str = "/etc/systemd/system/splatoon3-gadget.service";
 
 pub struct LinuxSystemdManager;
 
+impl Default for LinuxSystemdManager {
+    fn default() -> Self {
+        Self
+    }
+}
+
 impl LinuxSystemdManager {
     pub fn new() -> Self {
-        Self
+        Self::default()
     }
 
     fn get_executable_path() -> Result<String, SetupError> {
@@ -88,7 +94,7 @@ WantedBy=multi-user.target
         info!("Enabling systemd service...");
 
         let output = Command::new("systemctl")
-            .args(&["enable", &format!("{}.service", SERVICE_NAME)])
+            .args(["enable", &format!("{}.service", SERVICE_NAME)])
             .output()
             .map_err(|e| {
                 SetupError::SystemdServiceFailed(format!("Failed to run systemctl: {}", e))
@@ -109,7 +115,7 @@ WantedBy=multi-user.target
 
     fn is_service_enabled(&self) -> Result<bool, SetupError> {
         let output = Command::new("systemctl")
-            .args(&["is-enabled", &format!("{}.service", SERVICE_NAME)])
+            .args(["is-enabled", &format!("{}.service", SERVICE_NAME)])
             .output()
             .map_err(|e| {
                 SetupError::SystemdServiceFailed(format!("Failed to run systemctl: {}", e))

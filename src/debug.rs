@@ -84,7 +84,7 @@ pub fn init_logging(config: &DebugConfig) -> Result<(), Box<dyn std::error::Erro
 
     // 環境変数からのフィルター設定
     let env_filter = EnvFilter::try_from_default_env()
-        .or_else(|_| EnvFilter::try_new(&format!("splatoon3_ghost_drawer={}", config.log_level)))
+        .or_else(|_| EnvFilter::try_new(format!("splatoon3_ghost_drawer={}", config.log_level)))
         .unwrap();
 
     // シンプルな設定でサブスクライバーを初期化
@@ -216,7 +216,7 @@ macro_rules! measure_time {
         pub fn record_operation(&mut self, name: &str, duration_ms: u128) {
             self.operations
                 .entry(name.to_string())
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(duration_ms);
         }
 

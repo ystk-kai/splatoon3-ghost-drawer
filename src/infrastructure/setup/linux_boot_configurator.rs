@@ -7,9 +7,15 @@ use tracing::info;
 
 pub struct LinuxBootConfigurator;
 
+impl Default for LinuxBootConfigurator {
+    fn default() -> Self {
+        Self
+    }
+}
+
 impl LinuxBootConfigurator {
     pub fn new() -> Self {
-        Self
+        Self::default()
     }
 
     fn configure_armbian_env(&self, board: &BoardModel) -> Result<(), SetupError> {

@@ -6,6 +6,7 @@ use crate::domain::shared::value_objects::Timestamp;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt;
+use std::str::FromStr;
 use uuid::Uuid;
 
 /// イベントID
@@ -24,7 +25,7 @@ impl EventId {
     }
 
     /// 文字列から作成
-    pub fn from_str(s: &str) -> Result<Self, String> {
+    pub fn parse(s: &str) -> Result<Self, String> {
         let uuid = Uuid::parse_str(s)
             .map_err(|e| format!("Invalid UUID format: {}", e))?;
         Ok(Self(uuid))
@@ -38,6 +39,14 @@ impl EventId {
     /// 文字列として取得
     pub fn as_str(&self) -> String {
         self.0.to_string()
+    }
+}
+
+impl FromStr for EventId {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Self::parse(s)
     }
 }
 
@@ -344,9 +353,15 @@ pub trait EventHandler<E: DomainEvent>: Send + Sync {
     fn name(&self) -> &'static str;
 }
 
+/// イベントハンドラーのエラー型
+type HandlerError = Box<dyn std::error::Error + Send + Sync>;
+
+/// イベントハンドラーのボックス型
+type BoxedEventHandler = Box<dyn EventHandler<dyn DomainEvent, Error = HandlerError>>;
+
 /// イベントディスパッチャー
 pub struct EventDispatcher {
-    handlers: HashMap<String, Vec<Box<dyn EventHandler<dyn DomainEvent, Error = Box<dyn std::error::Error + Send + Sync>>>>>,
+    handlers: HashMap<String, Vec<BoxedEventHandler>>,
 }
 
 impl EventDispatcher {
@@ -367,7 +382,7 @@ impl EventDispatcher {
         // ここでは簡略化した実装を示す
         self.handlers
             .entry(event_type)
-            .or_insert_with(Vec::new);
+            .or_default();
         // .push(handler);
     }
 

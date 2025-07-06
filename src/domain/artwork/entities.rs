@@ -6,6 +6,7 @@ use crate::domain::shared::value_objects::{Coordinates, Color, Timestamp};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt;
+use std::str::FromStr;
 use uuid::Uuid;
 use tracing::{info, warn, error, debug, instrument};
 
@@ -25,7 +26,7 @@ impl ArtworkId {
     }
 
     /// 文字列から作成
-    pub fn from_str(s: &str) -> Result<Self, String> {
+    pub fn parse(s: &str) -> Result<Self, String> {
         let uuid = Uuid::parse_str(s)
             .map_err(|e| format!("Invalid UUID format: {}", e))?;
         Ok(Self(uuid))
@@ -39,6 +40,14 @@ impl ArtworkId {
     /// 文字列として取得
     pub fn as_str(&self) -> String {
         self.0.to_string()
+    }
+}
+
+impl FromStr for ArtworkId {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Self::parse(s)
     }
 }
 
@@ -323,7 +332,7 @@ impl Artwork {
 
         // ドットの座標検証
         debug!("ドット座標の検証: {}個のドット", self.canvas.dots.len());
-        for (coord, _) in &self.canvas.dots {
+        for coord in self.canvas.dots.keys() {
             if !coord.is_within_bounds(self.canvas.width, self.canvas.height) {
                 error!("ドットが範囲外の座標にあります: {}", coord);
                 return Err(ArtworkValidationError::DotOutOfBounds(*coord));

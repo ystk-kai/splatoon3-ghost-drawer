@@ -9,11 +9,17 @@ pub struct LinuxHidDeviceRepository {
     default_device_path: String,
 }
 
-impl LinuxHidDeviceRepository {
-    pub fn new() -> Self {
+impl Default for LinuxHidDeviceRepository {
+    fn default() -> Self {
         Self {
             default_device_path: "/dev/hidg0".to_string(),
         }
+    }
+}
+
+impl LinuxHidDeviceRepository {
+    pub fn new() -> Self {
+        Self::default()
     }
 
     pub fn with_device_path(device_path: impl Into<String>) -> Self {

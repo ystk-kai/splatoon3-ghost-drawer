@@ -5,9 +5,15 @@ use tracing::{debug, error};
 
 pub struct LinuxBoardDetector;
 
+impl Default for LinuxBoardDetector {
+    fn default() -> Self {
+        Self
+    }
+}
+
 impl LinuxBoardDetector {
     pub fn new() -> Self {
-        Self
+        Self::default()
     }
 }
 

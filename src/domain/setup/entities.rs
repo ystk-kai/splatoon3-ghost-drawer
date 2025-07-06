@@ -35,19 +35,9 @@ impl BoardModel {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct SystemSetupStatus {
     pub boot_configured: bool,
     pub systemd_service_enabled: bool,
     pub usb_gadget_configured: bool,
-}
-
-impl Default for SystemSetupStatus {
-    fn default() -> Self {
-        Self {
-            boot_configured: false,
-            systemd_service_enabled: false,
-            usb_gadget_configured: false,
-        }
-    }
 }

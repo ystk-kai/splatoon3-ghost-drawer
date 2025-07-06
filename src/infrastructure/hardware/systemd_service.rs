@@ -6,9 +6,15 @@ use tracing::info;
 
 pub struct SystemdServiceManager;
 
+impl Default for SystemdServiceManager {
+    fn default() -> Self {
+        Self
+    }
+}
+
 impl SystemdServiceManager {
     pub fn new() -> Self {
-        Self
+        Self::default()
     }
 
     async fn run_systemctl(&self, args: &[&str]) -> Result<std::process::Output, HardwareError> {
