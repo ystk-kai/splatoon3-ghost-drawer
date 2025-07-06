@@ -1,92 +1,57 @@
 # Splatoon3 Ghost Drawer
 
-このプロジェクトは Domain-Driven Design (DDD) 原則に基づいて設計されており、Rust 2024 Edition を使用して実装されています。
+Nintendo Switch Pro Controllerをエミュレートして、Splatoon3の広場で画像を自動描画するシステムです。USB OTG機能を使用してSwitchに接続し、画像データを忠実に再現します。
 
 ## 主な機能
 
-- 画像ファイルからSplatoon3用ドットデータへの変換
-- Nintendo Switch Pro Controllerエミュレーション
-- USB OTG経由での自動描画実行
-- Web UIによる直感的な操作
-- リアルタイム進捗監視
+- 🎨 画像ファイルからSplatoon3用ドットデータへの自動変換
+- 🎮 Nintendo Switch Pro Controllerの完全エミュレーション
+- 🔌 USB OTG経由でのSwitch直接接続
+- 🌐 Web UIによる直感的な操作とリアルタイム制御
+- 📊 描画進捗のリアルタイム監視とログストリーミング
+- 🚀 高速な画像処理と最適化されたドット配置
 
 ## 技術スタック
 
 - **言語**: Rust 2024 Edition
 - **アーキテクチャ**: Domain-Driven Design (DDD)
-- **非同期ランタイム**: tokio
-- **プラットフォーム**: Orange Pi Zero 2W (推奨) / Raspberry Pi Zero 2W
+- **Webフレームワーク**: Axum
+- **非同期ランタイム**: Tokio
+- **対応プラットフォーム**: Linux (USB Gadget API対応)
 
-## 推奨ハードウェア
+## 対応ハードウェア
 
-### 🥇 Orange Pi Zero 2W 2GB（最推奨）
+USB OTG (On-The-Go) 機能をサポートするLinuxボードが必要です：
 
-**技術仕様**:
-- **CPU**: Allwinner H618 (ARM Cortex-A53 × 4, 1.5GHz)
-- **RAM**: 2GB LPDDR4 @ 792MHz
-- **USB**: Type-C × 2 (OTG + Host)
-- **WiFi**: 802.11ac デュアルバンド
-- **Bluetooth**: 5.0
-- **価格**: 約$20-25
+- **Raspberry Pi Zero / Zero W / Zero 2W**
+- **Orange Pi Zero 2W**
+- その他のUSB Gadget API対応Linuxデバイス
 
-**利点**:
-- 十分なメモリ容量（2GB）
-- 高性能CPU（1.5GHz）
-- デュアルUSB Type-C（OTG対応）
-- 優れた価格性能比
+## クイックスタート
 
-### 🥈 Raspberry Pi Zero 2W
+### 1. システムセットアップ（初回のみ）
 
-**技術仕様**:
-- **CPU**: Broadcom BCM2710A1 (ARM Cortex-A53 × 4, 1.0GHz)
-- **RAM**: 512MB LPDDR2
-- **USB**: Micro USB OTG
-- **WiFi**: 802.11n
-- **Bluetooth**: 4.2
-- **価格**: 約$15
-
-**利点**:
-- 確実なUSB OTG対応
-- 豊富な情報とコミュニティサポート
-- 低価格・省電力
-
-**制限**:
-- メモリ制限（512MB）により大きな画像処理に制約
-- 処理速度がOrange Pi Zero 2Wより劣る
-
-## 推奨OS
-
-### Orange Pi Zero 2W: Armbian Noble Server (Ubuntu 24.04)
 ```bash
-# ダウンロード
-https://www.armbian.com/orange-pi-zero-2w/
-
-# 推奨イメージ
-Armbian_community_24.5.1_Orangepizero2w_noble_current_6.12.y_server.img.xz
+# USB Gadgetモードの設定とsystemdサービスの登録
+sudo splatoon3-ghost-drawer setup
 ```
 
-### Raspberry Pi Zero 2W: Raspberry Pi OS Lite
-```bash
-# ダウンロード
-https://www.raspberrypi.com/software/operating-systems/
+### 2. アプリケーションの起動
 
-# 推奨イメージ
-Raspberry Pi OS Lite (64-bit)
+```bash
+# Webサーバーを起動（デフォルト: 0.0.0.0:8080）
+splatoon3-ghost-drawer run
+
+# カスタムポートで起動
+splatoon3-ghost-drawer run --port 3000
+
+# ローカルホストのみで起動
+splatoon3-ghost-drawer run --host 127.0.0.1
 ```
 
-## 画像処理性能
+### 3. Web UIにアクセス
 
-| 処理内容 | Orange Pi Zero 2W | Raspberry Pi Zero 2W |
-|---------|------------------|---------------------|
-| **10MB→50KB変換** | 3-8秒 | 15-30秒 |
-| **複数画像同時処理** | ✅ 快適 | ⚠️ 制限あり |
-| **Webサーバー+変換** | ✅ 快適 | ⚠️ 重い |
-| **メモリ使用量** | 余裕あり | ほぼ限界 |
-
-### 推奨用途
-
-- **Orange Pi Zero 2W**: 本格運用、複数画像処理、快適なWeb UI
-- **Raspberry Pi Zero 2W**: 学習用、単発処理、軽量運用
+ブラウザで `http://[デバイスのIPアドレス]:8080` にアクセスして操作を開始します。
 
 ## 開発
 
@@ -122,63 +87,47 @@ source ~/.cargo/env
 rustup default stable
 ```
 
-4. **USB Gadgetモードの設定**
-```bash
-# セットアップスクリプトの実行
-sudo ./scripts/setup_gadget.sh
-```
-
-5. **ビルドと実行**
+4. **ビルドと実行**
 ```bash
 # デバッグビルド
 cargo build
 
-# リリースビルド
+# リリースビルド（推奨）
 cargo build --release
 
-# 実行（推奨）
-cargo run -- help
+# セットアップ（初回のみ、要root権限）
+sudo ./target/release/splatoon3-ghost-drawer setup
 
-# Web UIサーバー起動
-cargo run -- serve
-
-# 直接実行（必要に応じて）
-sudo ./target/release/splatoon3-ghost-drawer help
+# アプリケーション起動
+./target/release/splatoon3-ghost-drawer run
 ```
 
 ### 使用方法
 
-#### CLIインターフェース
+#### CLIコマンド
 
 ```bash
-# 画像変換
-cargo run -- convert input.png --output artwork.json
+# ヘルプの表示
+splatoon3-ghost-drawer --help
 
-# 描画実行
-cargo run -- paint artwork.json --speed normal
+# システムセットアップ（初回のみ）
+sudo splatoon3-ghost-drawer setup
 
-# 設定表示
-cargo run -- config
+# 強制的に再セットアップ
+sudo splatoon3-ghost-drawer setup --force
 
-# テストモード
-cargo run -- test
+# Webサーバーの起動
+splatoon3-ghost-drawer run
 
-# Web UIサーバー起動
-cargo run -- serve --port 8080
+# カスタム設定でサーバー起動
+splatoon3-ghost-drawer run --host 0.0.0.0 --port 8080
 ```
 
-#### Web UI
+#### Web UIの使用
 
-```bash
-# Webサーバー起動
-cargo run -- serve
-
-# カスタムポート・ホストで起動
-cargo run -- serve --port 8080 --host 0.0.0.0
-
-# ブラウザでアクセス
-http://localhost:8080
-```
+1. `splatoon3-ghost-drawer run` でサーバーを起動
+2. ブラウザで `http://[IPアドレス]:8080` にアクセス
+3. 画像をアップロードして変換・描画を実行
 
 ## アーキテクチャ
 
@@ -205,27 +154,27 @@ http://localhost:8080
 ### USB OTG が認識されない
 
 ```bash
-# dwc2ドライバーの確認
-lsmod | grep dwc2
-
 # USB Gadgetの状態確認
-sudo systemctl status nintendo-controller.service
+sudo systemctl status splatoon3-gadget.service
 
-# 手動でのGadget設定
-sudo /usr/local/bin/setup-nintendo-controller.sh
+# カーネルモジュールの確認
+lsmod | grep -E "dwc2|libcomposite"
+
+# 手動でUSB Gadgetを設定
+sudo splatoon3-ghost-drawer _internal_configure_gadget
 ```
 
-### 画像変換が遅い
+### Web UIにアクセスできない
 
 ```bash
-# メモリ使用量確認
-free -h
+# サーバーが起動しているか確認
+ps aux | grep splatoon3-ghost-drawer
 
-# CPU使用率確認
-htop
+# ポートが開いているか確認
+sudo lsof -i :8080
 
-# 画像サイズの事前縮小
-# クライアント側でのリサイズ機能を利用
+# ファイアウォールの確認
+sudo iptables -L -n | grep 8080
 ```
 
 ### Nintendo Switchで認識されない
@@ -234,10 +183,11 @@ htop
 # HIDデバイスの確認
 ls /dev/hidg*
 
-# USB接続の確認
-dmesg | grep -i usb
+# USB Gadgetの状態確認
+cat /sys/kernel/config/usb_gadget/g1/UDC
 
-# 電源供給の確認（5V/2A以上）
+# dmesgでUSB関連のログを確認
+dmesg | tail -50 | grep -i usb
 ```
 
 ## 貢献
