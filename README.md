@@ -29,14 +29,27 @@ USB OTG (On-The-Go) 機能をサポートするLinuxボードが必要です：
 
 ## クイックスタート
 
-### 1. システムセットアップ（初回のみ）
+### 1. インストール
+
+```bash
+# Rustツールチェーンのインストール（未インストールの場合）
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+source ~/.cargo/env
+
+# このプロジェクトをインストール
+git clone https://github.com/yourusername/splatoon3-ghost-drawer.git
+cd splatoon3-ghost-drawer
+cargo install --path .
+```
+
+### 2. システムセットアップ（初回のみ）
 
 ```bash
 # USB Gadgetモードの設定とsystemdサービスの登録
 sudo splatoon3-ghost-drawer setup
 ```
 
-### 2. アプリケーションの起動
+### 3. アプリケーションの起動
 
 ```bash
 # Webサーバーを起動（デフォルト: 0.0.0.0:8080）
@@ -49,7 +62,7 @@ splatoon3-ghost-drawer run --port 3000
 splatoon3-ghost-drawer run --host 127.0.0.1
 ```
 
-### 3. Web UIにアクセス
+### 4. Web UIにアクセス
 
 ブラウザで `http://[デバイスのIPアドレス]:8080` にアクセスして操作を開始します。
 
@@ -87,19 +100,25 @@ source ~/.cargo/env
 rustup default stable
 ```
 
-4. **ビルドと実行**
+4. **インストール**
 ```bash
-# デバッグビルド
-cargo build
+# リリースビルドしてシステムにインストール（推奨）
+cargo install --path .
+# → ~/.cargo/bin/splatoon3-ghost-drawer にインストールされます
+# → PATHが通っているため、どこからでも実行可能
 
-# リリースビルド（推奨）
+# または手動でビルドして実行
 cargo build --release
+# → ./target/release/splatoon3-ghost-drawer を直接実行
+```
 
-# セットアップ（初回のみ、要root権限）
-sudo ./target/release/splatoon3-ghost-drawer setup
+5. **初期セットアップと実行**
+```bash
+# システムセットアップ（初回のみ、要root権限）
+sudo splatoon3-ghost-drawer setup
 
 # アプリケーション起動
-./target/release/splatoon3-ghost-drawer run
+splatoon3-ghost-drawer run
 ```
 
 ### 使用方法
