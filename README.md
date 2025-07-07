@@ -1,6 +1,7 @@
 # Splatoon3 Ghost Drawer
 
-Nintendo Switch Pro Controllerをエミュレートして、Splatoon3の広場で画像を自動描画するシステムです。USB OTG機能を使用してSwitchに接続し、画像データを忠実に再現します。
+Nintendo Switch Pro Controllerをエミュレートして、Splatoon3の広場で画像を自動描画するシステムです。  
+USB OTG機能を使用してSwitchに接続し、画像データを忠実に再現します。
 
 ## 主な機能
 
@@ -224,26 +225,3 @@ cat /sys/kernel/config/usb_gadget/g1/UDC
 # dmesgでUSB関連のログを確認
 dmesg | tail -50 | grep -i usb
 ```
-
-## 貢献
-
-1. このリポジトリをフォーク
-2. 機能ブランチを作成 (`git checkout -b feature/amazing-feature`)
-3. 変更をコミット (`git commit -m 'Add amazing feature'`)
-4. ブランチにプッシュ (`git push origin feature/amazing-feature`)
-5. プルリクエストを作成
-
-## ライセンス
-
-このプロジェクトは MIT ライセンスの下で公開されています。詳細は [LICENSE](LICENSE) ファイルを参照してください。
-
-## 免責事項
-
-このプロジェクトは教育・研究目的で開発されています。Nintendo Switch や Splatoon3 の利用規約を遵守してご使用ください。自動化ツールの使用により発生する問題について、開発者は責任を負いません。
-
-## 謝辞
-
-- Rust コミュニティ
-- Armbian プロジェクト
-- Orange Pi / Raspberry Pi コミュニティ
-- Domain-Driven Design コミュニティ 
