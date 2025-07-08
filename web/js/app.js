@@ -72,8 +72,12 @@ class GhostDrawerApp {
         });
 
         // アクションボタン
-        document.getElementById('paintButton').addEventListener('click', () => {
-            this.startPainting();
+        document.getElementById('paintDeviceButton').addEventListener('click', () => {
+            this.startPainting(true);
+        });
+        
+        document.getElementById('paintSimulationButton').addEventListener('click', () => {
+            this.startPainting(false);
         });
 
         document.getElementById('downloadButton').addEventListener('click', () => {
@@ -623,30 +627,21 @@ class GhostDrawerApp {
 
     updateButtonStates() {
         const hasFile = this.currentFile !== null;
-        const paintButton = document.getElementById('paintButton');
+        const paintDeviceButton = document.getElementById('paintDeviceButton');
+        const paintSimulationButton = document.getElementById('paintSimulationButton');
 
-        // 画像がある場合は描画ボタンを有効化（シミュレーションも可能）
-        paintButton.disabled = !hasFile || this.isProcessing;
+        // 画像がある場合は両方のボタンを有効化
+        paintDeviceButton.disabled = !hasFile || this.isProcessing;
+        paintSimulationButton.disabled = !hasFile || this.isProcessing;
         
-        // 接続状態に応じてボタンテキストを変更
+        // 接続状態に応じて実機描画ボタンの表示を変更
         if (!this.isHardwareConnected && hasFile) {
-            paintButton.innerHTML = `
-                <svg class="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                シミュレーション
-            `;
+            // 未接続時は実機描画ボタンを半透明に
+            paintDeviceButton.style.opacity = '0.6';
+            paintDeviceButton.title = 'Nintendo Switchと接続してください';
         } else {
-            paintButton.innerHTML = `
-                <svg class="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zM7 3V1m0 20v-2m8-10h2m-2 4h2m-2 4h2m-2-8h2" />
-                </svg>
-                描画開始
-            `;
+            paintDeviceButton.style.opacity = '1';
+            paintDeviceButton.title = '';
         }
         
         document.getElementById('downloadButton').disabled = !hasFile || this.isProcessing;
@@ -768,7 +763,9 @@ class GhostDrawerApp {
             
             // USB OTG接続時でも自動描画は行わない
             if (this.isHardwareConnected) {
-                this.addLog('USB OTG接続を検出しました。「描画開始」ボタンを押して描画を開始してください。', 'info');
+                this.addLog('USB OTG接続を検出しました。「🎮 実機に描画」ボタンを押して描画を開始してください。', 'info');
+            } else {
+                this.addLog('ハードウェアが接続されていません。「💻 シミュレーション」で動作を確認できます。', 'info');
             }
             
             setTimeout(() => {
@@ -786,8 +783,11 @@ class GhostDrawerApp {
 
 
 
-    async startPainting() {
+    async startPainting(useDevice = null) {
         if (!this.currentFile || this.isProcessing || !this.currentBinaryData) return;
+
+        // useDeviceがnullの場合は接続状態に依存
+        const isDevicePainting = useDevice !== null ? useDevice : this.isHardwareConnected;
 
         this.isProcessing = true;
         this.isPainting = true;
@@ -801,7 +801,7 @@ class GhostDrawerApp {
         this.hideProgress();
         
         // シミュレーションの場合は倍速コントロールと進捗スライダーを表示
-        if (!this.isHardwareConnected) {
+        if (!isDevicePainting) {
             document.getElementById('simulationSpeedControl').classList.remove('hidden');
             document.getElementById('progressSliderControl').classList.remove('hidden');
             // 進捗スライダーをリセット
@@ -813,7 +813,7 @@ class GhostDrawerApp {
         }
 
         try {
-            if (this.isHardwareConnected) {
+            if (isDevicePainting) {
                 // 実際の描画
                 this.addLog(`Nintendo Switchで描画を開始します... (速度: ${this.paintingSpeed.toFixed(1)}ドット/秒)`, 'info');
                 
