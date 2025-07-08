@@ -3,7 +3,7 @@ use std::fs;
 use std::io::Write;
 use std::path::Path;
 use std::process::Command;
-use tracing::{debug, info, warn};
+use tracing::{debug, info};
 
 const GADGET_SERVICE_NAME: &str = "splatoon3-gadget";
 const GADGET_SERVICE_FILE: &str = "/etc/systemd/system/splatoon3-gadget.service";
@@ -308,9 +308,18 @@ WantedBy=multi-user.target
             src_dir.join("web"),
             Path::new("/home/ystk/projects/splatoon3-ghost-drawer/web").to_path_buf(),
             Path::new("./web").to_path_buf(),
+            // Add more potential locations
+            exe_path.parent().map(|p| p.join("web")).unwrap_or_default(),
+            Path::new("/usr/local/share/splatoon3-ghost-drawer/web").to_path_buf(),
+            Path::new("/usr/share/splatoon3-ghost-drawer/web").to_path_buf(),
         ];
 
         let mut web_src_found = false;
+        info!("Searching for web directory in the following locations:");
+        for path in &web_dirs {
+            info!("  - {:?}", path);
+        }
+        
         for web_src in &web_dirs {
             if web_src.exists() {
                 info!("Found web directory at: {:?}", web_src);
@@ -353,9 +362,9 @@ WantedBy=multi-user.target
         }
 
         if !web_src_found {
-            warn!(
-                "Web directory not found in any expected location. Web UI may not work properly."
-            );
+            return Err(SetupError::SystemdServiceFailed(
+                "Web directory not found. Please ensure the web directory is in the same location as the binary or install from the complete package.".to_string()
+            ));
         }
 
         // Copy the binary itself to /opt for consistency
