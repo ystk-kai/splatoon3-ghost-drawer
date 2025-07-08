@@ -39,8 +39,9 @@ impl SystemdServiceManager for LinuxSystemdManager {
         let service_content = format!(
             r#"[Unit]
 Description=Splatoon3 Ghost Drawer USB Gadget Configuration
-After=multi-user.target
-Before=network.target
+After=sysinit.target
+Before=basic.target
+DefaultDependencies=no
 
 [Service]
 Type=oneshot
@@ -49,9 +50,10 @@ ExecStart={} _internal_configure_gadget
 ExecStop=/bin/sh -c 'echo "" > /sys/kernel/config/usb_gadget/g1/UDC || true'
 StandardOutput=journal
 StandardError=journal
+TimeoutStartSec=30s
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=sysinit.target
 "#,
             executable_path
         );
@@ -137,18 +139,20 @@ WantedBy=multi-user.target
         let service_content = format!(
             r#"[Unit]
 Description=Splatoon3 Ghost Drawer Web Service
-After=network.target splatoon3-gadget.service
+After=network-online.target splatoon3-gadget.service
+Wants=network-online.target
 Requires=splatoon3-gadget.service
 
 [Service]
 Type=simple
 ExecStart={} run
-Restart=always
+Restart=on-failure
 RestartSec=10
 User=root
 Environment="RUST_LOG=info"
 StandardOutput=journal
 StandardError=journal
+TimeoutStartSec=60s
 
 [Install]
 WantedBy=multi-user.target
