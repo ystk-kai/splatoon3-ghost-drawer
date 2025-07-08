@@ -54,10 +54,18 @@ async fn check_nintendo_switch_connection() -> bool {
         return false;
     }
 
-    // Check USB Gadget state
+    // Check USB Gadget state - UDC should contain the USB controller name when connected
     let gadget_udc_path = "/sys/kernel/config/usb_gadget/g1/UDC";
     if let Ok(udc_content) = std::fs::read_to_string(gadget_udc_path) {
-        return !udc_content.trim().is_empty();
+        let udc_trimmed = udc_content.trim();
+        if !udc_trimmed.is_empty() {
+            // Additional check: verify the HID device can be opened for writing
+            if let Ok(_) = std::fs::OpenOptions::new()
+                .write(true)
+                .open("/dev/hidg0") {
+                return true;
+            }
+        }
     }
 
     false

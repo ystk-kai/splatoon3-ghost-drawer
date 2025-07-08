@@ -49,7 +49,7 @@ impl Default for DrawingCanvasConfig {
         Self {
             width: 320,
             height: 120,
-            cursor_speed_ms: 50,      // 1ピクセル移動に50ms
+            cursor_speed_ms: 100,     // 1ピクセル移動に100ms
             dot_draw_delay_ms: 100,   // ドット描画に100ms
             line_wrap_delay_ms: 200,  // 行折り返しに追加200ms
             drawing_mode: DrawingMode::PixelPen,

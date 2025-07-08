@@ -48,10 +48,18 @@ impl ArtworkToCommandConverter {
         let mut command = ControllerCommand::new("Initialize")
             .with_description("コントローラーを初期化");
 
-        // すべてのボタンをリリース
+        // Switchのメニュー表示待機
         command = command
-            .add_action(ControllerAction::wait(500))
+            .add_action(ControllerAction::wait(2000))
             .add_action(ControllerAction::set_dpad(DPad::NEUTRAL, 100));
+        
+        // カーソルを左上に移動（初期位置へ）
+        // 左上に完全に移動するため、画面サイズ以上の移動を実行
+        for _ in 0..150 {
+            command = command.add_action(ControllerAction::set_dpad(DPad::UP_LEFT, 20));
+        }
+        command = command
+            .add_action(ControllerAction::set_dpad(DPad::NEUTRAL, 500));
 
         command
     }
@@ -63,9 +71,11 @@ impl ArtworkToCommandConverter {
 
         let mode_button = self.config.drawing_mode.select_button();
         
+        // ペン選択前の待機時間を追加
         command = command
-            .add_action(ControllerAction::press_button(mode_button, 100))
-            .add_action(ControllerAction::release_button(mode_button, 500));
+            .add_action(ControllerAction::wait(500))
+            .add_action(ControllerAction::press_button(mode_button, 200))
+            .add_action(ControllerAction::release_button(mode_button, 1000));
 
         command
     }

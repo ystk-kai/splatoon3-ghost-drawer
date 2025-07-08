@@ -766,12 +766,9 @@ class GhostDrawerApp {
                 adjustmentPanel.classList.remove('hidden');
             }
             
-            // USB OTG接続時は自動的に描画を開始
+            // USB OTG接続時でも自動描画は行わない
             if (this.isHardwareConnected) {
-                this.addLog('USB OTG接続を検出しました。3秒後に自動描画を開始します...', 'info');
-                setTimeout(() => {
-                    this.startPainting();
-                }, 3000);
+                this.addLog('USB OTG接続を検出しました。「描画開始」ボタンを押して描画を開始してください。', 'info');
             }
             
             setTimeout(() => {

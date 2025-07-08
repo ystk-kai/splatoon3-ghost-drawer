@@ -63,10 +63,11 @@ impl LinuxBoardDetector {
         let udc_available = if udc_path.exists() {
             match fs::read_dir(udc_path).await {
                 Ok(mut entries) => {
-                    while let Ok(Some(_)) = entries.next_entry().await {
-                        return true;
+                    if entries.next_entry().await.is_ok() {
+                        true
+                    } else {
+                        false
                     }
-                    false
                 }
                 Err(_) => false,
             }

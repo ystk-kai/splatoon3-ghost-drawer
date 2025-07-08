@@ -75,7 +75,15 @@ where
         let commands = converter.convert(artwork);
         info!("{}個のコマンドを生成しました", commands.len());
 
-        // 6. セッションの作成
+        // 6. 接続確認のためのダミーレポート送信
+        info!("接続確認のためのダミーレポートを送信");
+        let neutral_report = controller.current_state;
+        for _ in 0..5 {
+            self.hid_repo.write_report(device_path, &neutral_report).await?;
+            sleep(Duration::from_millis(100)).await;
+        }
+        
+        // 7. セッションの作成
         let session_id = Uuid::new_v4().to_string();
         let mut session = ControllerSession::new(&session_id, &controller.id);
         
@@ -86,7 +94,7 @@ where
         
         self.session_repo.create_session(&session).await?;
 
-        // 7. セッションの実行
+        // 8. セッションの実行
         session.start();
         self.session_repo.update_session(&session).await?;
 
@@ -128,7 +136,7 @@ where
             }
         }
 
-        // 8. クリーンアップ
+        // 9. クリーンアップ
         controller.reset_state();
         self.controller_repo.update_controller(&controller).await?;
         
@@ -139,7 +147,7 @@ where
         session.stop();
         self.session_repo.update_session(&session).await?;
 
-        // 9. 結果をまとめる
+        // 10. 結果をまとめる
         let drawable_dots = artwork.canvas.drawable_dots().len();
         let result = PaintResult {
             success: true,
@@ -175,7 +183,7 @@ pub struct PaintConfig {
 impl Default for PaintConfig {
     fn default() -> Self {
         Self {
-            cursor_speed_ms: 50,
+            cursor_speed_ms: 100,
             dot_draw_delay_ms: 100,
             strategy: DrawingStrategy::ZigZag,
             check_interrupt: true,
