@@ -299,19 +299,20 @@ WantedBy=multi-user.target
             SetupError::SystemdServiceFailed(format!("Failed to get executable path: {}", e))
         })?;
 
-        let src_dir = exe_path.parent().and_then(|p| p.parent()).ok_or_else(|| {
-            SetupError::SystemdServiceFailed("Failed to determine source directory".to_string())
-        })?;
-
         // Look for web directory in common locations
         let web_dirs = [
-            src_dir.join("web"),
-            Path::new("/home/ystk/projects/splatoon3-ghost-drawer/web").to_path_buf(),
-            Path::new("./web").to_path_buf(),
-            // Add more potential locations
-            exe_path.parent().map(|p| p.join("web")).unwrap_or_default(),
+            // Primary location for installed package
             Path::new("/usr/local/share/splatoon3-ghost-drawer/web").to_path_buf(),
             Path::new("/usr/share/splatoon3-ghost-drawer/web").to_path_buf(),
+            // Development location
+            Path::new("/home/ystk/projects/splatoon3-ghost-drawer/web").to_path_buf(),
+            // Current directory (for manual runs)
+            Path::new("./web").to_path_buf(),
+            // Relative to binary location (for cargo install)
+            exe_path.parent()
+                .and_then(|p| p.parent())
+                .map(|p| p.join("share/splatoon3-ghost-drawer/web"))
+                .unwrap_or_default(),
         ];
 
         let mut web_src_found = false;
