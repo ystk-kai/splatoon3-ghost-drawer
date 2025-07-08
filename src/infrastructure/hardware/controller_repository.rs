@@ -1,4 +1,7 @@
-use crate::domain::controller::{ControllerError, ControllerRepository, ControllerSession, ControllerSessionRepository, ProController};
+use crate::domain::controller::{
+    ControllerError, ControllerRepository, ControllerSession, ControllerSessionRepository,
+    ProController,
+};
 use async_trait::async_trait;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -64,24 +67,30 @@ impl ControllerRepository for InMemoryControllerRepository {
         Ok(controllers.values().cloned().collect())
     }
 
-    async fn connect_controller(&self, controller: &mut ProController) -> Result<(), ControllerError> {
+    async fn connect_controller(
+        &self,
+        controller: &mut ProController,
+    ) -> Result<(), ControllerError> {
         if controller.is_connected {
             return Err(ControllerError::AlreadyConnected);
         }
-        
+
         // デフォルトのデバイスパスを設定
         if controller.device_path.is_none() {
             controller.connect("/dev/hidg0");
         }
-        
+
         self.update_controller(controller).await
     }
 
-    async fn disconnect_controller(&self, controller: &mut ProController) -> Result<(), ControllerError> {
+    async fn disconnect_controller(
+        &self,
+        controller: &mut ProController,
+    ) -> Result<(), ControllerError> {
         if !controller.is_connected {
             return Err(ControllerError::NotConnected);
         }
-        
+
         controller.disconnect();
         self.update_controller(controller).await
     }
@@ -149,10 +158,6 @@ impl ControllerSessionRepository for InMemorySessionRepository {
 
     async fn get_active_sessions(&self) -> Result<Vec<ControllerSession>, ControllerError> {
         let sessions = self.sessions.read().await;
-        Ok(sessions
-            .values()
-            .filter(|s| s.is_active)
-            .cloned()
-            .collect())
+        Ok(sessions.values().filter(|s| s.is_active).cloned().collect())
     }
 }

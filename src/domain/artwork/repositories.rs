@@ -1,5 +1,5 @@
 //! アートワーク集約のリポジトリトレイト
-//! 
+//!
 //! アートワークの永続化に関するトレイトを定義
 
 use crate::domain::artwork::entities::{Artwork, ArtworkId, ArtworkMetadata, ArtworkStatistics};
@@ -37,21 +37,21 @@ pub enum RepositoryError {
 impl RepositoryError {
     /// エラーが一時的なものかチェック
     pub fn is_transient(&self) -> bool {
-        matches!(self, 
-            Self::ConnectionError { .. } | 
-            Self::ConcurrentModification |
-            Self::Internal { .. }
+        matches!(
+            self,
+            Self::ConnectionError { .. } | Self::ConcurrentModification | Self::Internal { .. }
         )
     }
 
     /// エラーがクライアント側の問題かチェック
     pub fn is_client_error(&self) -> bool {
-        matches!(self,
-            Self::NotFound { .. } |
-            Self::AlreadyExists { .. } |
-            Self::ValidationError { .. } |
-            Self::PermissionDenied { .. } |
-            Self::InvalidQuery { .. }
+        matches!(
+            self,
+            Self::NotFound { .. }
+                | Self::AlreadyExists { .. }
+                | Self::ValidationError { .. }
+                | Self::PermissionDenied { .. }
+                | Self::InvalidQuery { .. }
         )
     }
 }
@@ -225,7 +225,12 @@ pub struct SearchResult {
 }
 
 impl SearchResult {
-    pub fn new(artworks: Vec<Artwork>, total_count: usize, has_more: bool, query_time_ms: u64) -> Self {
+    pub fn new(
+        artworks: Vec<Artwork>,
+        total_count: usize,
+        has_more: bool,
+        query_time_ms: u64,
+    ) -> Self {
         Self {
             artworks,
             total_count,
@@ -347,7 +352,10 @@ pub trait ArtworkRepository: Send + Sync {
     }
 
     /// アートワークの統計情報を取得
-    async fn get_statistics(&self, id: &ArtworkId) -> Result<Option<ArtworkStatistics>, RepositoryError> {
+    async fn get_statistics(
+        &self,
+        id: &ArtworkId,
+    ) -> Result<Option<ArtworkStatistics>, RepositoryError> {
         if let Some(artwork) = self.find_by_id(id).await? {
             Ok(Some(artwork.statistics()))
         } else {
@@ -358,33 +366,37 @@ pub trait ArtworkRepository: Send + Sync {
     /// 複数のアートワークを一括保存
     async fn save_batch(&self, artworks: &[Artwork]) -> Result<BatchResult, RepositoryError> {
         let mut result = BatchResult::new();
-        
+
         for artwork in artworks {
             match self.save(artwork).await {
                 Ok(()) => result.add_success(artwork.id.clone()),
                 Err(error) => result.add_failure(artwork.id.clone(), error),
             }
         }
-        
+
         Ok(result)
     }
 
     /// 複数のアートワークを一括削除
     async fn delete_batch(&self, ids: &[ArtworkId]) -> Result<BatchResult, RepositoryError> {
         let mut result = BatchResult::new();
-        
+
         for id in ids {
             match self.delete(id).await {
                 Ok(()) => result.add_success(id.clone()),
                 Err(error) => result.add_failure(id.clone(), error),
             }
         }
-        
+
         Ok(result)
     }
 
     /// メタデータのみを更新
-    async fn update_metadata(&self, id: &ArtworkId, metadata: &ArtworkMetadata) -> Result<(), RepositoryError> {
+    async fn update_metadata(
+        &self,
+        id: &ArtworkId,
+        metadata: &ArtworkMetadata,
+    ) -> Result<(), RepositoryError> {
         if let Some(mut artwork) = self.find_by_id(id).await? {
             artwork.update_metadata(metadata.clone());
             self.save(&artwork).await
@@ -417,14 +429,22 @@ pub trait ArtworkRepository: Send + Sync {
     }
 
     /// 指定された期間のアートワークを取得
-    async fn find_by_date_range(&self, start: Timestamp, end: Timestamp) -> Result<Vec<Artwork>, RepositoryError> {
+    async fn find_by_date_range(
+        &self,
+        start: Timestamp,
+        end: Timestamp,
+    ) -> Result<Vec<Artwork>, RepositoryError> {
         let query = ArtworkQuery::new().with_date_range(Some(start), Some(end));
         let result = self.search(&query).await?;
         Ok(result.artworks)
     }
 
     /// 完成度による検索
-    async fn find_by_completion_range(&self, min: f64, max: f64) -> Result<Vec<Artwork>, RepositoryError> {
+    async fn find_by_completion_range(
+        &self,
+        min: f64,
+        max: f64,
+    ) -> Result<Vec<Artwork>, RepositoryError> {
         let mut query = ArtworkQuery::new();
         query.min_completion = Some(min);
         query.max_completion = Some(max);
@@ -534,7 +554,7 @@ mod tests {
         let metadata = ArtworkMetadata::new("Test".to_string());
         let canvas = Canvas::new(10, 10);
         let artwork = Artwork::new(metadata, "png".to_string(), canvas);
-        
+
         let result = SearchResult::new(vec![artwork], 1, false, 100);
         assert!(!result.is_empty());
         assert_eq!(result.len(), 1);
@@ -542,14 +562,16 @@ mod tests {
 
     #[test]
     fn test_repository_error_classification() {
-        let not_found = RepositoryError::NotFound { id: ArtworkId::generate() };
+        let not_found = RepositoryError::NotFound {
+            id: ArtworkId::generate(),
+        };
         assert!(not_found.is_client_error());
         assert!(!not_found.is_transient());
 
-        let connection_error = RepositoryError::ConnectionError { 
-            message: "Connection lost".to_string() 
+        let connection_error = RepositoryError::ConnectionError {
+            message: "Connection lost".to_string(),
         };
         assert!(!connection_error.is_client_error());
         assert!(connection_error.is_transient());
     }
-} 
+}

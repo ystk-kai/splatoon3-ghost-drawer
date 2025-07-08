@@ -1,14 +1,12 @@
 use crate::domain::artwork::entities::Artwork;
 use crate::domain::controller::{
-    ControllerError, ControllerRepository, ControllerSession, ControllerSessionRepository,
-    HidDeviceRepository, ProController,
+    ButtonState, ControllerError, ControllerRepository, ControllerSession,
+    ControllerSessionRepository, DPad, HidDeviceRepository, ProController, StickPosition,
 };
-use crate::domain::painting::{
-    ArtworkToCommandConverter, DrawingCanvasConfig, DrawingStrategy,
-};
+use crate::domain::painting::{ArtworkToCommandConverter, DrawingCanvasConfig, DrawingStrategy};
 use std::time::Duration;
 use tokio::time::sleep;
-use tracing::info;
+use tracing::{debug, info};
 use uuid::Uuid;
 
 pub struct PaintArtworkUseCase<CR, HR, SR> {
@@ -31,7 +29,11 @@ where
         }
     }
 
-    pub async fn execute(&self, artwork: &Artwork, config: PaintConfig) -> Result<PaintResult, ControllerError> {
+    pub async fn execute(
+        &self,
+        artwork: &Artwork,
+        config: PaintConfig,
+    ) -> Result<PaintResult, ControllerError> {
         info!("アートワークの描画を開始: {}", artwork.metadata.name);
 
         // 1. HIDデバイスの確認
@@ -70,28 +72,48 @@ where
             dot_draw_delay_ms: config.dot_draw_delay_ms,
             ..Default::default()
         };
-        
+
         let converter = ArtworkToCommandConverter::new(drawing_config, config.strategy);
         let commands = converter.convert(artwork);
         info!("{}個のコマンドを生成しました", commands.len());
 
         // 6. 接続確認のためのダミーレポート送信
         info!("接続確認のためのダミーレポートを送信");
-        let neutral_report = controller.current_state;
-        for _ in 0..5 {
-            self.hid_repo.write_report(device_path, &neutral_report).await?;
-            sleep(Duration::from_millis(100)).await;
+        let mut neutral_report = controller.current_state;
+        // ニュートラル状態を確実に設定
+        neutral_report.dpad = DPad::NEUTRAL;
+        neutral_report.left_stick = StickPosition::CENTER;
+        neutral_report.right_stick = StickPosition::CENTER;
+        neutral_report.buttons = ButtonState::new();
+
+        // Pro Controllerの初期化シーケンス
+        info!("初期化シーケンスを開始");
+
+        // 最初にニュートラルレポートを送信
+        let pro_report = neutral_report.to_pro_controller_bytes();
+        for i in 0..10 {
+            self.hid_repo
+                .write_pro_controller_report(device_path, &pro_report)
+                .await?;
+            if i < 5 {
+                sleep(Duration::from_millis(100)).await;
+            } else {
+                sleep(Duration::from_millis(50)).await;
+            }
         }
-        
+
+        // USBコマンドをチェックして応答（非ブロッキング）
+        self.handle_usb_commands(device_path).await?;
+
         // 7. セッションの作成
         let session_id = Uuid::new_v4().to_string();
         let mut session = ControllerSession::new(&session_id, &controller.id);
-        
+
         // コマンドをキューに追加
         for command in commands {
             session.queue_command(command);
         }
-        
+
         self.session_repo.create_session(&session).await?;
 
         // 8. セッションの実行
@@ -108,9 +130,11 @@ where
                 controller.apply_action(current_action);
                 self.controller_repo.update_controller(&controller).await?;
 
-                // HIDレポートを送信
-                let report = controller.current_state;
-                self.hid_repo.write_report(device_path, &report).await?;
+                // Pro Controller形式のHIDレポートを送信
+                let report = controller.current_state.to_pro_controller_bytes();
+                self.hid_repo
+                    .write_pro_controller_report(device_path, &report)
+                    .await?;
 
                 // アクションの継続時間だけ待機
                 sleep(Duration::from_millis(current_action.duration_ms as u64)).await;
@@ -118,7 +142,7 @@ where
                 // 次のアクションへ
                 if !session.advance_action() {
                     executed_commands += 1;
-                    
+
                     // 進捗を報告
                     let progress = (executed_commands * 100) / total_commands;
                     if progress > last_progress + 10 {
@@ -126,7 +150,7 @@ where
                         last_progress = progress;
                     }
                 }
-                
+
                 self.session_repo.update_session(&session).await?;
             }
 
@@ -139,9 +163,12 @@ where
         // 9. クリーンアップ
         controller.reset_state();
         self.controller_repo.update_controller(&controller).await?;
-        
+
         // 最終レポートを送信（すべてニュートラル）
-        self.hid_repo.write_report(device_path, &controller.current_state).await?;
+        let final_report = controller.current_state.to_pro_controller_bytes();
+        self.hid_repo
+            .write_pro_controller_report(device_path, &final_report)
+            .await?;
 
         // セッションを終了
         session.stop();
@@ -153,18 +180,92 @@ where
             success: true,
             dots_painted: drawable_dots,
             commands_executed: executed_commands,
-            duration_ms: session.started_at.map(|start| {
-                let now = std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
-                    .as_millis() as u64;
-                now - start
-            }).unwrap_or(0),
+            duration_ms: session
+                .started_at
+                .map(|start| {
+                    let now = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap()
+                        .as_millis() as u64;
+                    now - start
+                })
+                .unwrap_or(0),
             device_used: device_path.clone(),
         };
 
         info!("アートワークの描画が完了しました: {:?}", result);
         Ok(result)
+    }
+
+    /// USBコマンドを処理して応答
+    async fn handle_usb_commands(&self, device_path: &str) -> Result<(), ControllerError> {
+        use tokio::time::timeout;
+
+        // 非ブロッキングでコマンドをチェック
+        match timeout(
+            Duration::from_millis(100),
+            self.hid_repo.read_usb_command(device_path),
+        )
+        .await
+        {
+            Ok(Ok(command)) if !command.is_empty() => {
+                info!(
+                    "受信したUSBコマンド: {:02x?}",
+                    &command[..command.len().min(16)]
+                );
+
+                // コマンドに応じて応答
+                if command.len() >= 2 {
+                    match (command[0], command[1]) {
+                        (0x80, 0x01) => {
+                            // Status request
+                            info!("Status request received");
+                            let response = vec![0x81, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
+                            self.hid_repo
+                                .write_usb_response(device_path, &response)
+                                .await?;
+                        }
+                        (0x80, 0x02) => {
+                            // Handshake
+                            info!("Handshake request received");
+                            let response = vec![0x81, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
+                            self.hid_repo
+                                .write_usb_response(device_path, &response)
+                                .await?;
+                        }
+                        (0x80, 0x03) => {
+                            // Force USB mode (no timeout)
+                            info!("Force USB mode request received");
+                            let response = vec![0x81, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
+                            self.hid_repo
+                                .write_usb_response(device_path, &response)
+                                .await?;
+                        }
+                        (0x80, 0x04) => {
+                            // Enable vibration
+                            info!("Enable vibration request received");
+                            let response = vec![0x81, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
+                            self.hid_repo
+                                .write_usb_response(device_path, &response)
+                                .await?;
+                        }
+                        _ => {
+                            info!("未知のコマンド: 0x{:02x} 0x{:02x}", command[0], command[1]);
+                        }
+                    }
+                }
+            }
+            Ok(Err(e)) => {
+                // エラーの場合はログに記録して続行
+                debug!("コマンド読み取りエラー: {}", e);
+            }
+            Err(_) => {
+                // タイムアウトは正常（コマンドがない）
+            }
+            _ => {}
+        }
+
+        Ok(())
     }
 }
 

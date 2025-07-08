@@ -10,13 +10,13 @@ pub async fn stream_logs(mut socket: WebSocket) {
     info!("Starting log streaming");
 
     // Send connection established message
-    let connect_msg = create_log_message(
-        "INFO",
-        "Log streaming connected",
-        "log_streamer",
-    );
-    
-    if socket.send(Message::Text(connect_msg.into())).await.is_err() {
+    let connect_msg = create_log_message("INFO", "Log streaming connected", "log_streamer");
+
+    if socket
+        .send(Message::Text(connect_msg.into()))
+        .await
+        .is_err()
+    {
         return;
     }
 
@@ -32,17 +32,17 @@ pub async fn stream_logs(mut socket: WebSocket) {
                     "Log stream heartbeat",
                     "log_streamer",
                 );
-                
+
                 if socket.send(Message::Text(status_msg.into())).await.is_err() {
                     break;
                 }
             }
-            
+
             msg = socket.recv() => {
                 match msg {
                     Some(Ok(Message::Text(text))) => {
                         debug!("Received client message: {}", text);
-                        
+
                         // Parse client command if any
                         if text.trim() == "ping" {
                             let pong_msg = create_log_message(
@@ -50,7 +50,7 @@ pub async fn stream_logs(mut socket: WebSocket) {
                                 "Pong",
                                 "log_streamer",
                             );
-                            
+
                             if socket.send(Message::Text(pong_msg.into())).await.is_err() {
                                 break;
                             }
@@ -81,4 +81,3 @@ fn create_log_message(level: &str, message: &str, target: &str) -> String {
     })
     .to_string()
 }
-

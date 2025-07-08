@@ -1,5 +1,5 @@
 //! 共有ドメインイベント
-//! 
+//!
 //! システム全体で使用されるドメインイベントを定義
 
 use crate::domain::shared::value_objects::Timestamp;
@@ -26,8 +26,7 @@ impl EventId {
 
     /// 文字列から作成
     pub fn parse(s: &str) -> Result<Self, String> {
-        let uuid = Uuid::parse_str(s)
-            .map_err(|e| format!("Invalid UUID format: {}", e))?;
+        let uuid = Uuid::parse_str(s).map_err(|e| format!("Invalid UUID format: {}", e))?;
         Ok(Self(uuid))
     }
 
@@ -72,22 +71,22 @@ impl From<EventId> for Uuid {
 pub trait DomainEvent: Send + Sync + fmt::Debug {
     /// イベントタイプを取得
     fn event_type(&self) -> &'static str;
-    
+
     /// イベントIDを取得
     fn event_id(&self) -> &EventId;
-    
+
     /// 発生時刻を取得
     fn occurred_at(&self) -> Timestamp;
-    
+
     /// イベントバージョンを取得
     fn version(&self) -> u32;
-    
+
     /// 集約IDを取得
     fn aggregate_id(&self) -> String;
-    
+
     /// イベントデータをJSONとしてシリアライズ
     fn as_json(&self) -> Result<String, serde_json::Error>;
-    
+
     /// イベントメタデータを取得
     fn metadata(&self) -> &EventMetadata;
 }
@@ -151,7 +150,7 @@ impl Default for EventMetadata {
 }
 
 /// イベントエンベロープ
-/// 
+///
 /// イベントストアでの保存や転送に使用される包装構造
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EventEnvelope {
@@ -203,7 +202,7 @@ impl EventEnvelope {
 }
 
 /// イベントストリーム
-/// 
+///
 /// 特定の集約に関連するイベントのシーケンス
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EventStream {
@@ -255,10 +254,7 @@ impl EventStream {
 
     /// 指定されたバージョン以降のイベントを取得
     pub fn events_since_version(&self, version: u32) -> Vec<&EventEnvelope> {
-        self.events
-            .iter()
-            .filter(|e| e.version > version)
-            .collect()
+        self.events.iter().filter(|e| e.version > version).collect()
     }
 
     /// 最新のイベントを取得
@@ -288,17 +284,17 @@ impl EventStream {
     pub fn events_in_range(&self, start: Timestamp, end: Timestamp) -> Vec<&EventEnvelope> {
         self.events
             .iter()
-            .filter(|e| e.occurred_at.epoch_millis >= start.epoch_millis 
-                && e.occurred_at.epoch_millis <= end.epoch_millis)
+            .filter(|e| {
+                e.occurred_at.epoch_millis >= start.epoch_millis
+                    && e.occurred_at.epoch_millis <= end.epoch_millis
+            })
             .collect()
     }
 
     /// ストリームの統計情報を取得
     pub fn statistics(&self) -> EventStreamStatistics {
-        let event_types: std::collections::HashSet<String> = self.events
-            .iter()
-            .map(|e| e.event_type.clone())
-            .collect();
+        let event_types: std::collections::HashSet<String> =
+            self.events.iter().map(|e| e.event_type.clone()).collect();
 
         let first_event_time = self.events.first().map(|e| e.occurred_at);
         let last_event_time = self.events.last().map(|e| e.occurred_at);
@@ -380,9 +376,7 @@ impl EventDispatcher {
     ) {
         // Note: 実際の実装では型安全性を保つためにより複雑な設計が必要
         // ここでは簡略化した実装を示す
-        self.handlers
-            .entry(event_type)
-            .or_default();
+        self.handlers.entry(event_type).or_default();
         // .push(handler);
     }
 
@@ -580,8 +574,8 @@ mod tests {
 
         // 新しく作成されたイベントは古くない
         assert!(!envelope.is_older_than(1000));
-        
+
         // 年齢は0に近い値になる
         assert!(envelope.age_millis() < 100);
     }
-} 
+}

@@ -1,11 +1,11 @@
 use super::{
-    create_artwork, delete_artwork, get_artwork, list_artworks, paint_artwork, upload_artwork,
-    ArtworkState, get_hardware_status, get_system_info, websocket_handler,
+    ArtworkState, create_artwork, delete_artwork, get_artwork, get_hardware_status,
+    get_system_info, list_artworks, paint_artwork, upload_artwork, websocket_handler,
 };
 use axum::{
+    Router,
     extract::DefaultBodyLimit,
     routing::{get, post},
-    Router,
 };
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -32,7 +32,10 @@ pub async fn create_server(host: String, port: u16) -> anyhow::Result<()> {
         // Artwork endpoints
         .route("/api/artworks", get(list_artworks).post(create_artwork))
         .route("/api/artworks/upload", post(upload_artwork))
-        .route("/api/artworks/{id}", get(get_artwork).delete(delete_artwork))
+        .route(
+            "/api/artworks/{id}",
+            get(get_artwork).delete(delete_artwork),
+        )
         .route("/api/artworks/{id}/paint", post(paint_artwork))
         // WebSocket endpoint
         .route("/ws/logs", get(websocket_handler))
@@ -42,16 +45,14 @@ pub async fn create_server(host: String, port: u16) -> anyhow::Result<()> {
         .layer(
             ServiceBuilder::new()
                 .layer(DefaultBodyLimit::max(10 * 1024 * 1024)) // 10MB limit
-                .layer(CorsLayer::permissive())
+                .layer(CorsLayer::permissive()),
         )
         // Serve static files from web directory as fallback
-        .fallback_service(
-            ServeDir::new("web").append_index_html_on_directories(true)
-        );
+        .fallback_service(ServeDir::new("web").append_index_html_on_directories(true));
 
     // Create TCP listener
     let listener = TcpListener::bind(&addr).await?;
-    
+
     println!("🌐 Web server started successfully!");
     println!("   URL: http://{}", addr);
     println!("   Press Ctrl+C to stop");

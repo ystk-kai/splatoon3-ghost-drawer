@@ -1,5 +1,5 @@
 //! アートワーク集約の値オブジェクト
-//! 
+//!
 //! 画像形式、解像度、変換パラメータなどの値オブジェクトを定義
 
 use serde::{Deserialize, Serialize};
@@ -39,10 +39,7 @@ impl ImageFormat {
 
     /// ファイル名から画像フォーマットを推定
     pub fn from_filename(filename: &str) -> Option<Self> {
-        filename
-            .rsplit('.')
-            .next()
-            .and_then(Self::from_extension)
+        filename.rsplit('.').next().and_then(Self::from_extension)
     }
 
     /// MIMEタイプから画像フォーマットを推定
@@ -92,7 +89,10 @@ impl ImageFormat {
 
     /// ロスレス圧縮かチェック
     pub fn is_lossless(&self) -> bool {
-        matches!(self, Self::Png | Self::Gif | Self::Bmp | Self::Tiff | Self::Raw)
+        matches!(
+            self,
+            Self::Png | Self::Gif | Self::Bmp | Self::Tiff | Self::Raw
+        )
     }
 
     /// アニメーションサポートかチェック
@@ -102,7 +102,10 @@ impl ImageFormat {
 
     /// 透明度サポートかチェック
     pub fn supports_transparency(&self) -> bool {
-        matches!(self, Self::Png | Self::Gif | Self::Webp | Self::Svg | Self::Ico)
+        matches!(
+            self,
+            Self::Png | Self::Gif | Self::Webp | Self::Svg | Self::Ico
+        )
     }
 
     /// メタデータサポートかチェック
@@ -136,7 +139,10 @@ impl ImageFormat {
 
     /// Web表示に適しているかチェック
     pub fn is_web_compatible(&self) -> bool {
-        matches!(self, Self::Png | Self::Jpeg | Self::Gif | Self::Webp | Self::Svg)
+        matches!(
+            self,
+            Self::Png | Self::Jpeg | Self::Gif | Self::Webp | Self::Svg
+        )
     }
 }
 
@@ -150,8 +156,7 @@ impl FromStr for ImageFormat {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Self::from_extension(s)
-            .ok_or_else(|| format!("Unsupported image format: {}", s))
+        Self::from_extension(s).ok_or_else(|| format!("Unsupported image format: {}", s))
     }
 }
 
@@ -181,20 +186,44 @@ impl Resolution {
 
     /// Splatoon3標準解像度
     pub fn splatoon3_standard() -> Self {
-        Self { width: 320, height: 120 }
+        Self {
+            width: 320,
+            height: 120,
+        }
     }
 
     /// 一般的な解像度プリセット
     pub fn preset(preset: ResolutionPreset) -> Self {
         match preset {
             ResolutionPreset::Splatoon3 => Self::splatoon3_standard(),
-            ResolutionPreset::Qvga => Self { width: 320, height: 240 },
-            ResolutionPreset::Vga => Self { width: 640, height: 480 },
-            ResolutionPreset::Svga => Self { width: 800, height: 600 },
-            ResolutionPreset::Xga => Self { width: 1024, height: 768 },
-            ResolutionPreset::Hd => Self { width: 1280, height: 720 },
-            ResolutionPreset::FullHd => Self { width: 1920, height: 1080 },
-            ResolutionPreset::UltraHd => Self { width: 3840, height: 2160 },
+            ResolutionPreset::Qvga => Self {
+                width: 320,
+                height: 240,
+            },
+            ResolutionPreset::Vga => Self {
+                width: 640,
+                height: 480,
+            },
+            ResolutionPreset::Svga => Self {
+                width: 800,
+                height: 600,
+            },
+            ResolutionPreset::Xga => Self {
+                width: 1024,
+                height: 768,
+            },
+            ResolutionPreset::Hd => Self {
+                width: 1280,
+                height: 720,
+            },
+            ResolutionPreset::FullHd => Self {
+                width: 1920,
+                height: 1080,
+            },
+            ResolutionPreset::UltraHd => Self {
+                width: 3840,
+                height: 2160,
+            },
         }
     }
 
@@ -216,11 +245,7 @@ impl Resolution {
 
     /// 最大公約数を計算
     fn gcd(a: u32, b: u32) -> u32 {
-        if b == 0 {
-            a
-        } else {
-            Self::gcd(b, a % b)
-        }
+        if b == 0 { a } else { Self::gcd(b, a % b) }
     }
 
     /// 指定された最大サイズに収まるようにスケール
@@ -312,7 +337,7 @@ impl Resolution {
     /// 解像度の分類を取得
     pub fn classification(&self) -> ResolutionClass {
         let pixels = self.total_pixels();
-        
+
         if pixels <= 320 * 240 {
             ResolutionClass::Low
         } else if pixels <= 1280 * 720 {
@@ -327,9 +352,11 @@ impl Resolution {
 
 impl fmt::Display for Resolution {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} x {} ({} pixels)", 
-            self.width, 
-            self.height, 
+        write!(
+            f,
+            "{} x {} ({} pixels)",
+            self.width,
+            self.height,
             self.total_pixels()
         )
     }
@@ -344,9 +371,13 @@ impl FromStr for Resolution {
             return Err(ResolutionError::InvalidFormat);
         }
 
-        let width = parts[0].trim().parse::<u32>()
+        let width = parts[0]
+            .trim()
+            .parse::<u32>()
             .map_err(|_| ResolutionError::InvalidFormat)?;
-        let height = parts[1].trim().parse::<u32>()
+        let height = parts[1]
+            .trim()
+            .parse::<u32>()
             .map_err(|_| ResolutionError::InvalidFormat)?;
 
         Self::new(width, height)
@@ -555,7 +586,9 @@ impl ImageAdjustments {
             return Err("ガンマは0.1から10.0の範囲で指定してください".to_string());
         }
         if !self.validate_points() {
-            return Err("ブラックポイントはホワイトポイントより小さくする必要があります".to_string());
+            return Err(
+                "ブラックポイントはホワイトポイントより小さくする必要があります".to_string(),
+            );
         }
         if self.adaptive_threshold && !self.validate_adaptive() {
             return Err("適応的2値化のブロックサイズは3以上の奇数である必要があります".to_string());
@@ -606,7 +639,10 @@ impl ConversionParameters {
     }
 
     /// 背景色を設定
-    pub fn with_background_color(mut self, color: crate::domain::shared::value_objects::Color) -> Self {
+    pub fn with_background_color(
+        mut self,
+        color: crate::domain::shared::value_objects::Color,
+    ) -> Self {
         self.background_color = Some(color);
         self
     }
@@ -664,7 +700,11 @@ impl ConversionParameters {
     pub fn with_adaptive_threshold(mut self, enable: bool, block_size: u16, constant: i8) -> Self {
         self.adjustments.adaptive_threshold = enable;
         if enable {
-            self.adjustments.adaptive_block_size = if block_size % 2 == 0 { block_size + 1 } else { block_size };
+            self.adjustments.adaptive_block_size = if block_size % 2 == 0 {
+                block_size + 1
+            } else {
+                block_size
+            };
             self.adjustments.adaptive_constant = constant.clamp(-100, 100);
         }
         self
@@ -730,13 +770,13 @@ mod tests {
         assert_eq!(ImageFormat::from_extension("png"), Some(ImageFormat::Png));
         assert_eq!(ImageFormat::from_extension("jpg"), Some(ImageFormat::Jpeg));
         assert_eq!(ImageFormat::from_extension("unknown"), None);
-        
+
         assert_eq!(ImageFormat::Png.extension(), "png");
         assert_eq!(ImageFormat::Jpeg.mime_type(), "image/jpeg");
-        
+
         assert!(ImageFormat::Png.is_lossless());
         assert!(!ImageFormat::Jpeg.is_lossless());
-        
+
         assert!(ImageFormat::Png.supports_transparency());
         assert!(!ImageFormat::Jpeg.supports_transparency());
     }
@@ -748,11 +788,11 @@ mod tests {
         assert_eq!(res.aspect_ratio(), 1920.0 / 1080.0);
         assert!(res.is_landscape());
         assert!(!res.is_portrait());
-        
+
         let scaled = res.scale(0.5).unwrap();
         assert_eq!(scaled.width, 960);
         assert_eq!(scaled.height, 540);
-        
+
         let fitted = res.scale_to_fit(800, 600);
         assert!(fitted.width <= 800);
         assert!(fitted.height <= 600);
@@ -763,7 +803,7 @@ mod tests {
         let res = "1920x1080".parse::<Resolution>().unwrap();
         assert_eq!(res.width, 1920);
         assert_eq!(res.height, 1080);
-        
+
         assert!("invalid".parse::<Resolution>().is_err());
         assert!("1920".parse::<Resolution>().is_err());
     }
@@ -775,7 +815,7 @@ mod tests {
         assert_eq!(params.target_resolution, Resolution::splatoon3_standard());
         assert!(params.dithering);
         assert!(params.color_reduction.is_some());
-        
+
         assert!(params.validate().is_ok());
     }
 
@@ -783,10 +823,10 @@ mod tests {
     fn test_resolution_classification() {
         let low_res = Resolution::new(320, 240).unwrap();
         assert_eq!(low_res.classification(), ResolutionClass::Low);
-        
+
         let hd_res = Resolution::new(1280, 720).unwrap();
         assert_eq!(hd_res.classification(), ResolutionClass::Medium);
-        
+
         let full_hd = Resolution::new(1920, 1080).unwrap();
         assert_eq!(full_hd.classification(), ResolutionClass::High);
     }
@@ -796,11 +836,11 @@ mod tests {
         let source = Resolution::new(100, 100).unwrap();
         let target = Resolution::new(120, 140).unwrap();
         let padding = source.pad_to(&target);
-        
+
         assert_eq!(padding.left, 10);
         assert_eq!(padding.right, 10);
         assert_eq!(padding.top, 20);
         assert_eq!(padding.bottom, 20);
         assert!(padding.is_needed());
     }
-} 
+}

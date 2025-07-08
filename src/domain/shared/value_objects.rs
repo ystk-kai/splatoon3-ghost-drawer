@@ -1,5 +1,5 @@
 //! 共有値オブジェクト
-//! 
+//!
 //! 複数の集約で使用される共通の値オブジェクトを定義
 
 use serde::{Deserialize, Serialize};
@@ -10,7 +10,7 @@ use std::str::FromStr;
 pub trait Entity {
     /// エンティティのID型
     type Id;
-    
+
     /// エンティティのIDを取得
     fn id(&self) -> &Self::Id;
 }
@@ -47,8 +47,16 @@ impl Coordinates {
 
     /// マンハッタン距離を計算
     pub fn manhattan_distance_to(&self, other: &Coordinates) -> u32 {
-        let dx = if self.x > other.x { self.x - other.x } else { other.x - self.x };
-        let dy = if self.y > other.y { self.y - other.y } else { other.y - self.y };
+        let dx = if self.x > other.x {
+            self.x - other.x
+        } else {
+            other.x - self.x
+        };
+        let dy = if self.y > other.y {
+            self.y - other.y
+        } else {
+            other.y - self.y
+        };
         (dx as u32) + (dy as u32)
     }
 
@@ -56,7 +64,7 @@ impl Coordinates {
     pub fn move_by(&self, dx: i16, dy: i16) -> Option<Coordinates> {
         let new_x = (self.x as i32) + (dx as i32);
         let new_y = (self.y as i32) + (dy as i32);
-        
+
         if new_x >= 0 && new_y >= 0 && new_x <= u16::MAX as i32 && new_y <= u16::MAX as i32 {
             Some(Coordinates::new(new_x as u16, new_y as u16))
         } else {
@@ -77,7 +85,7 @@ impl Coordinates {
 
         Some((
             Coordinates::new(min_x, min_y),
-            Coordinates::new(max_x, max_y)
+            Coordinates::new(max_x, max_y),
         ))
     }
 }
@@ -94,14 +102,18 @@ impl FromStr for Coordinates {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let s = s.trim_start_matches('(').trim_end_matches(')');
         let parts: Vec<&str> = s.split(',').collect();
-        
+
         if parts.len() != 2 {
             return Err("Invalid format. Expected (x, y)".to_string());
         }
 
-        let x = parts[0].trim().parse::<u16>()
+        let x = parts[0]
+            .trim()
+            .parse::<u16>()
             .map_err(|_| "Invalid x coordinate".to_string())?;
-        let y = parts[1].trim().parse::<u16>()
+        let y = parts[1]
+            .trim()
+            .parse::<u16>()
             .map_err(|_| "Invalid y coordinate".to_string())?;
 
         Ok(Coordinates::new(x, y))
@@ -158,7 +170,7 @@ impl Color {
     /// 16進数文字列から作成
     pub fn from_hex(hex: &str) -> Result<Self, String> {
         let hex = hex.trim_start_matches('#');
-        
+
         match hex.len() {
             6 => {
                 let r = u8::from_str_radix(&hex[0..2], 16)
@@ -168,7 +180,7 @@ impl Color {
                 let b = u8::from_str_radix(&hex[4..6], 16)
                     .map_err(|_| "Invalid blue component".to_string())?;
                 Ok(Self::from_rgb(r, g, b))
-            },
+            }
             8 => {
                 let r = u8::from_str_radix(&hex[0..2], 16)
                     .map_err(|_| "Invalid red component".to_string())?;
@@ -179,8 +191,8 @@ impl Color {
                 let a = u8::from_str_radix(&hex[6..8], 16)
                     .map_err(|_| "Invalid alpha component".to_string())?;
                 Ok(Self::new(r, g, b, a))
-            },
-            _ => Err("Invalid hex color format".to_string())
+            }
+            _ => Err("Invalid hex color format".to_string()),
         }
     }
 
@@ -240,9 +252,21 @@ impl Color {
         let g = self.g as f64 / 255.0;
         let b = self.b as f64 / 255.0;
 
-        let r_lin = if r <= 0.03928 { r / 12.92 } else { ((r + 0.055) / 1.055).powf(2.4) };
-        let g_lin = if g <= 0.03928 { g / 12.92 } else { ((g + 0.055) / 1.055).powf(2.4) };
-        let b_lin = if b <= 0.03928 { b / 12.92 } else { ((b + 0.055) / 1.055).powf(2.4) };
+        let r_lin = if r <= 0.03928 {
+            r / 12.92
+        } else {
+            ((r + 0.055) / 1.055).powf(2.4)
+        };
+        let g_lin = if g <= 0.03928 {
+            g / 12.92
+        } else {
+            ((g + 0.055) / 1.055).powf(2.4)
+        };
+        let b_lin = if b <= 0.03928 {
+            b / 12.92
+        } else {
+            ((b + 0.055) / 1.055).powf(2.4)
+        };
 
         0.2126 * r_lin + 0.7152 * g_lin + 0.0722 * b_lin
     }
@@ -281,44 +305,58 @@ impl FromStr for Color {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let s = s.trim();
-        
+
         if s.starts_with('#') {
             return Self::from_hex(s);
         }
 
         if s.starts_with("rgb(") && s.ends_with(')') {
-            let inner = &s[4..s.len()-1];
+            let inner = &s[4..s.len() - 1];
             let parts: Vec<&str> = inner.split(',').collect();
-            
+
             if parts.len() != 3 {
                 return Err("Invalid RGB format".to_string());
             }
 
-            let r = parts[0].trim().parse::<u8>()
+            let r = parts[0]
+                .trim()
+                .parse::<u8>()
                 .map_err(|_| "Invalid red component".to_string())?;
-            let g = parts[1].trim().parse::<u8>()
+            let g = parts[1]
+                .trim()
+                .parse::<u8>()
                 .map_err(|_| "Invalid green component".to_string())?;
-            let b = parts[2].trim().parse::<u8>()
+            let b = parts[2]
+                .trim()
+                .parse::<u8>()
                 .map_err(|_| "Invalid blue component".to_string())?;
 
             return Ok(Self::from_rgb(r, g, b));
         }
 
         if s.starts_with("rgba(") && s.ends_with(')') {
-            let inner = &s[5..s.len()-1];
+            let inner = &s[5..s.len() - 1];
             let parts: Vec<&str> = inner.split(',').collect();
-            
+
             if parts.len() != 4 {
                 return Err("Invalid RGBA format".to_string());
             }
 
-            let r = parts[0].trim().parse::<u8>()
+            let r = parts[0]
+                .trim()
+                .parse::<u8>()
                 .map_err(|_| "Invalid red component".to_string())?;
-            let g = parts[1].trim().parse::<u8>()
+            let g = parts[1]
+                .trim()
+                .parse::<u8>()
                 .map_err(|_| "Invalid green component".to_string())?;
-            let b = parts[2].trim().parse::<u8>()
+            let b = parts[2]
+                .trim()
+                .parse::<u8>()
                 .map_err(|_| "Invalid blue component".to_string())?;
-            let a = parts[3].trim().parse::<u8>()
+            let a = parts[3]
+                .trim()
+                .parse::<u8>()
                 .map_err(|_| "Invalid alpha component".to_string())?;
 
             return Ok(Self::new(r, g, b, a));
@@ -332,7 +370,7 @@ impl FromStr for Color {
             "green" => Ok(Self::green()),
             "blue" => Ok(Self::blue()),
             "transparent" => Ok(Self::transparent()),
-            _ => Err(format!("Unknown color name: {}", s))
+            _ => Err(format!("Unknown color name: {}", s)),
         }
     }
 }
@@ -399,9 +437,9 @@ impl Timestamp {
     pub fn to_iso8601(&self) -> String {
         let secs = self.epoch_millis / 1000;
         let millis = self.epoch_millis % 1000;
-        
+
         let _datetime = std::time::UNIX_EPOCH + std::time::Duration::from_secs(secs);
-        
+
         // 簡易的なISO 8601形式（実際の実装では chrono クレートを使用することを推奨）
         format!("{}.{:03}Z", secs, millis)
     }
@@ -409,7 +447,7 @@ impl Timestamp {
     /// 人間が読みやすい形式で出力
     pub fn to_human_readable(&self) -> String {
         let elapsed = self.elapsed_secs();
-        
+
         if elapsed < 60 {
             format!("{}秒前", elapsed)
         } else if elapsed < 3600 {
@@ -432,7 +470,8 @@ impl FromStr for Timestamp {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let millis = s.parse::<u64>()
+        let millis = s
+            .parse::<u64>()
             .map_err(|_| "Invalid timestamp format".to_string())?;
         Ok(Self::from_millis(millis))
     }
@@ -449,10 +488,10 @@ mod tests {
         assert_eq!(coord.y, 20);
         assert!(coord.is_within_bounds(100, 100));
         assert!(!coord.is_within_bounds(5, 5));
-        
+
         let other = Coordinates::new(13, 24);
         assert_eq!(coord.manhattan_distance_to(&other), 7);
-        
+
         assert_eq!(coord.to_string(), "(10, 20)");
         assert_eq!("(10, 20)".parse::<Coordinates>().unwrap(), coord);
     }
@@ -463,11 +502,11 @@ mod tests {
         assert_eq!(color.to_grayscale(), 128);
         assert!(color.to_binary(100));
         assert!(!color.to_binary(200));
-        
+
         let hex_color = Color::from_hex("#FF0000").unwrap();
         assert_eq!(hex_color, Color::red());
         assert_eq!(hex_color.to_hex(), "#FF0000");
-        
+
         let blended = Color::black().blend(&Color::white(), 0.5);
         assert_eq!(blended.r, 127);
         assert_eq!(blended.g, 127);
@@ -480,11 +519,11 @@ mod tests {
         std::thread::sleep(std::time::Duration::from_millis(10));
         let ts2 = Timestamp::now();
         assert!(ts2.epoch_millis > ts1.epoch_millis);
-        
+
         let ts_from_secs = Timestamp::from_secs(1609459200); // 2021-01-01 00:00:00 UTC
         assert_eq!(ts_from_secs.as_secs(), 1609459200);
-        
+
         let future = ts1.add_secs(3600);
         assert_eq!(future.epoch_millis, ts1.epoch_millis + 3600000);
     }
-} 
+}

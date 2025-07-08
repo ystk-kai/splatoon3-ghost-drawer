@@ -20,7 +20,7 @@ impl LinuxBootConfigurator {
 
     fn configure_armbian_env(&self, board: &BoardModel) -> Result<(), SetupError> {
         let env_file = "/boot/armbianEnv.txt";
-        
+
         if !Path::new(env_file).exists() {
             return Err(SetupError::BootConfigurationFailed(
                 "ArmbianEnv.txt not found".to_string(),
@@ -59,7 +59,7 @@ impl LinuxBootConfigurator {
             .write(true)
             .truncate(true)
             .open(env_file)?;
-        
+
         for line in &lines {
             writeln!(file, "{}", line)?;
         }
@@ -69,7 +69,7 @@ impl LinuxBootConfigurator {
 
     fn configure_raspberry_pi(&self, _board: &BoardModel) -> Result<(), SetupError> {
         let config_file = "/boot/config.txt";
-        
+
         if !Path::new(config_file).exists() {
             return Err(SetupError::BootConfigurationFailed(
                 "config.txt not found".to_string(),
@@ -85,10 +85,8 @@ impl LinuxBootConfigurator {
 
         if !has_dwc2 {
             // Append the configuration
-            let mut file = fs::OpenOptions::new()
-                .append(true)
-                .open(config_file)?;
-            
+            let mut file = fs::OpenOptions::new().append(true).open(config_file)?;
+
             writeln!(file, "\n# Enable USB OTG mode for gadget")?;
             writeln!(file, "dtoverlay=dwc2")?;
             info!("Added dtoverlay=dwc2 to {}", config_file);
@@ -98,7 +96,7 @@ impl LinuxBootConfigurator {
         let cmdline_file = "/boot/cmdline.txt";
         if Path::new(cmdline_file).exists() {
             let cmdline = fs::read_to_string(cmdline_file)?;
-            
+
             if !cmdline.contains("modules-load=dwc2") {
                 // Insert after rootwait
                 let new_cmdline = if cmdline.contains("rootwait") {
@@ -106,7 +104,7 @@ impl LinuxBootConfigurator {
                 } else {
                     format!("{} modules-load=dwc2", cmdline.trim())
                 };
-                
+
                 fs::write(cmdline_file, new_cmdline)?;
                 info!("Added modules-load=dwc2 to {}", cmdline_file);
             }
@@ -139,7 +137,7 @@ impl BootConfigurator for LinuxBootConfigurator {
                 if !Path::new(env_file).exists() {
                     return Ok(false);
                 }
-                
+
                 let content = fs::read_to_string(env_file)?;
                 if let Some(overlay) = board.otg_device_tree_overlay() {
                     Ok(content.contains(overlay))
@@ -152,7 +150,7 @@ impl BootConfigurator for LinuxBootConfigurator {
                 if !Path::new(config_file).exists() {
                     return Ok(false);
                 }
-                
+
                 let content = fs::read_to_string(config_file)?;
                 Ok(content.contains("dtoverlay=dwc2"))
             }
@@ -182,7 +180,7 @@ impl BootConfigurator for LinuxBootConfigurator {
                                 .split(' ')
                                 .filter(|s| !s.contains(overlay))
                                 .collect();
-                            
+
                             if overlays.is_empty() {
                                 *line = String::new();
                             } else {
@@ -197,12 +195,12 @@ impl BootConfigurator for LinuxBootConfigurator {
                 if modified {
                     // Remove empty lines
                     lines.retain(|line| !line.is_empty());
-                    
+
                     let mut file = fs::OpenOptions::new()
                         .write(true)
                         .truncate(true)
                         .open(env_file)?;
-                    
+
                     for line in &lines {
                         writeln!(file, "{}", line)?;
                     }
@@ -247,7 +245,9 @@ impl BootConfigurator for LinuxBootConfigurator {
                 if Path::new(cmdline_file).exists() {
                     let cmdline = fs::read_to_string(cmdline_file)?;
                     if cmdline.contains("modules-load=dwc2") {
-                        let new_cmdline = cmdline.replace(" modules-load=dwc2", "").replace("modules-load=dwc2 ", "");
+                        let new_cmdline = cmdline
+                            .replace(" modules-load=dwc2", "")
+                            .replace("modules-load=dwc2 ", "");
                         fs::write(cmdline_file, new_cmdline)?;
                         info!("Removed modules-load=dwc2 from {}", cmdline_file);
                     }
@@ -256,7 +256,10 @@ impl BootConfigurator for LinuxBootConfigurator {
                 Ok(())
             }
             BoardModel::Unknown(name) => {
-                info!("No boot configuration to remove for unknown board: {}", name);
+                info!(
+                    "No boot configuration to remove for unknown board: {}",
+                    name
+                );
                 Ok(())
             }
         }

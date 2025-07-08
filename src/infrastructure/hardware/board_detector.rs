@@ -1,10 +1,10 @@
 use crate::domain::hardware::{Board, BoardModel, BoardRepository, HardwareError};
 use async_trait::async_trait;
+use std::os::unix::process::ExitStatusExt;
 use std::path::Path;
 use tokio::fs;
 use tokio::process::Command;
 use tracing::{debug, info, warn};
-use std::os::unix::process::ExitStatusExt;
 
 pub struct LinuxBoardDetector;
 
@@ -14,9 +14,9 @@ impl LinuxBoardDetector {
     }
 
     async fn read_cpu_info(&self) -> Result<(String, String), HardwareError> {
-        let cpu_info = fs::read_to_string("/proc/cpuinfo")
-            .await
-            .map_err(|e| HardwareError::FileOperationFailed(format!("Failed to read /proc/cpuinfo: {}", e)))?;
+        let cpu_info = fs::read_to_string("/proc/cpuinfo").await.map_err(|e| {
+            HardwareError::FileOperationFailed(format!("Failed to read /proc/cpuinfo: {}", e))
+        })?;
 
         let mut model = String::new();
         let mut hardware = String::new();
@@ -33,14 +33,15 @@ impl LinuxBoardDetector {
     }
 
     async fn check_module_loaded(&self, module_name: &str) -> bool {
-        let output = Command::new("lsmod")
-            .output()
-            .await
-            .unwrap_or_else(|_| std::process::Output {
-                status: std::process::ExitStatus::from_raw(1),
-                stdout: Vec::new(),
-                stderr: Vec::new(),
-            });
+        let output =
+            Command::new("lsmod")
+                .output()
+                .await
+                .unwrap_or_else(|_| std::process::Output {
+                    status: std::process::ExitStatus::from_raw(1),
+                    stdout: Vec::new(),
+                    stderr: Vec::new(),
+                });
 
         if output.status.success() {
             let stdout = String::from_utf8_lossy(&output.stdout);
@@ -53,7 +54,7 @@ impl LinuxBoardDetector {
     async fn check_usb_otg_status(&self) -> bool {
         // Check if dwc2 module is loaded
         let dwc2_loaded = self.check_module_loaded("dwc2").await;
-        
+
         // Check if /sys/kernel/config/usb_gadget exists
         let gadget_path = Path::new("/sys/kernel/config/usb_gadget");
         let gadget_exists = gadget_path.exists();
@@ -86,16 +87,16 @@ impl BoardRepository for LinuxBoardDetector {
         debug!("CPU Model: {}, Hardware: {}", model_info, hardware_info);
 
         let board_model = BoardModel::from_cpu_info(&model_info, &hardware_info);
-        
+
         if matches!(board_model, BoardModel::Unknown) {
             warn!("Unknown board model detected");
         }
 
         let mut board = Board::new(board_model);
-        
+
         // Check USB OTG availability
         board.usb_otg_available = self.check_usb_otg_status().await;
-        
+
         // Check kernel modules
         for module in &mut board.kernel_modules {
             module.loaded = self.check_module_loaded(&module.name).await;
@@ -114,27 +115,34 @@ impl BoardRepository for LinuxBoardDetector {
 
     async fn load_kernel_module(&self, module_name: &str) -> Result<(), HardwareError> {
         info!("Loading kernel module: {}", module_name);
-        
+
         let output = Command::new("sudo")
             .args(&["modprobe", module_name])
             .output()
             .await
-            .map_err(|e| HardwareError::SystemCommandFailed(format!("Failed to execute modprobe: {}", e)))?;
+            .map_err(|e| {
+                HardwareError::SystemCommandFailed(format!("Failed to execute modprobe: {}", e))
+            })?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(HardwareError::KernelModuleNotLoaded(format!("{}: {}", module_name, stderr)));
+            return Err(HardwareError::KernelModuleNotLoaded(format!(
+                "{}: {}",
+                module_name, stderr
+            )));
         }
 
         Ok(())
     }
 
     async fn configure_boot_settings(&self, board: &Board) -> Result<(), HardwareError> {
-        let config_path = board.model.config_file_path()
-            .ok_or_else(|| HardwareError::BoardNotSupported("No config file path for this board".to_string()))?;
+        let config_path = board.model.config_file_path().ok_or_else(|| {
+            HardwareError::BoardNotSupported("No config file path for this board".to_string())
+        })?;
 
-        let dtoverlay = board.model.required_dtoverlay()
-            .ok_or_else(|| HardwareError::BoardNotSupported("No dtoverlay for this board".to_string()))?;
+        let dtoverlay = board.model.required_dtoverlay().ok_or_else(|| {
+            HardwareError::BoardNotSupported("No dtoverlay for this board".to_string())
+        })?;
 
         // Check if running with sufficient privileges
         let euid = unsafe { libc::geteuid() };
@@ -143,9 +151,9 @@ impl BoardRepository for LinuxBoardDetector {
         }
 
         // Read current config
-        let config_content = fs::read_to_string(config_path)
-            .await
-            .map_err(|e| HardwareError::FileOperationFailed(format!("Failed to read {}: {}", config_path, e)))?;
+        let config_content = fs::read_to_string(config_path).await.map_err(|e| {
+            HardwareError::FileOperationFailed(format!("Failed to read {}: {}", config_path, e))
+        })?;
 
         // Check if already configured
         if config_content.contains(dtoverlay) {
@@ -155,10 +163,10 @@ impl BoardRepository for LinuxBoardDetector {
 
         // Append configuration
         let new_content = format!("{}\n{}\n", config_content.trim_end(), dtoverlay);
-        
-        fs::write(config_path, &new_content)
-            .await
-            .map_err(|e| HardwareError::FileOperationFailed(format!("Failed to write {}: {}", config_path, e)))?;
+
+        fs::write(config_path, &new_content).await.map_err(|e| {
+            HardwareError::FileOperationFailed(format!("Failed to write {}: {}", config_path, e))
+        })?;
 
         info!("Boot configuration updated. Reboot required to apply changes.");
         Ok(())

@@ -1,4 +1,4 @@
-use crate::domain::artwork::value_objects::{ImageAdjustments, ColorReduction};
+use crate::domain::artwork::value_objects::{ColorReduction, ImageAdjustments};
 use crate::domain::shared::value_objects::Color;
 
 /// 画像処理サービス
@@ -23,7 +23,7 @@ impl ImageProcessingService {
         let black = adjustments.black_point as f32;
         let white = adjustments.white_point as f32;
         let range = white - black;
-        
+
         if range > 0.0 {
             r = ((r - black) * 255.0 / range).clamp(0.0, 255.0);
             g = ((g - black) * 255.0 / range).clamp(0.0, 255.0);
@@ -56,16 +56,18 @@ impl ImageProcessingService {
 
         // 6. ハイライト・シャドウ調整
         let luminance = pixel.luminance() as f32;
-        
+
         if adjustments.highlights != 0 && luminance > 0.5 {
-            let highlight_factor = 1.0 + (adjustments.highlights as f32 / 100.0) * ((luminance - 0.5) * 2.0);
+            let highlight_factor =
+                1.0 + (adjustments.highlights as f32 / 100.0) * ((luminance - 0.5) * 2.0);
             r = (r * highlight_factor).clamp(0.0, 255.0);
             g = (g * highlight_factor).clamp(0.0, 255.0);
             b = (b * highlight_factor).clamp(0.0, 255.0);
         }
-        
+
         if adjustments.shadows != 0 && luminance < 0.5 {
-            let shadow_factor = 1.0 + (adjustments.shadows as f32 / 100.0) * ((0.5 - luminance) * 2.0);
+            let shadow_factor =
+                1.0 + (adjustments.shadows as f32 / 100.0) * ((0.5 - luminance) * 2.0);
             r = (r * shadow_factor).clamp(0.0, 255.0);
             g = (g * shadow_factor).clamp(0.0, 255.0);
             b = (b * shadow_factor).clamp(0.0, 255.0);
@@ -77,7 +79,7 @@ impl ImageProcessingService {
     /// 2値化処理
     pub fn apply_threshold(pixel: &Color, adjustments: &ImageAdjustments) -> Color {
         let grayscale = pixel.to_grayscale();
-        
+
         if grayscale >= adjustments.threshold {
             Color::white()
         } else {
@@ -92,8 +94,9 @@ impl ImageProcessingService {
         adjustments: &ImageAdjustments,
     ) -> Color {
         let grayscale = pixel.to_grayscale();
-        let threshold = (local_average as i16 + adjustments.adaptive_constant as i16).clamp(0, 255) as u8;
-        
+        let threshold =
+            (local_average as i16 + adjustments.adaptive_constant as i16).clamp(0, 255) as u8;
+
         if grayscale >= threshold {
             Color::white()
         } else {
@@ -128,11 +131,11 @@ impl ImageProcessingService {
             ColorReduction::Palette(levels) => {
                 let levels = *levels as f32;
                 let step = 255.0 / (levels - 1.0);
-                
+
                 let r = ((pixel.r as f32 / step).round() * step).clamp(0.0, 255.0) as u8;
                 let g = ((pixel.g as f32 / step).round() * step).clamp(0.0, 255.0) as u8;
                 let b = ((pixel.b as f32 / step).round() * step).clamp(0.0, 255.0) as u8;
-                
+
                 Color::new(r, g, b, pixel.a)
             }
         }
@@ -143,43 +146,35 @@ impl ImageProcessingService {
         let total_pixels: u32 = histogram.iter().sum();
         let mut cdf = [0u32; 256];
         let mut lut = [0u8; 256];
-        
+
         // 累積分布関数（CDF）の計算
         cdf[0] = histogram[0];
         for i in 1..256 {
             cdf[i] = cdf[i - 1] + histogram[i];
         }
-        
+
         // ルックアップテーブルの作成
         let cdf_min = cdf.iter().find(|&&x| x > 0).copied().unwrap_or(0);
         let scale = 255.0 / (total_pixels - cdf_min) as f32;
-        
+
         for i in 0..256 {
             if cdf[i] > cdf_min {
                 lut[i] = ((cdf[i] - cdf_min) as f32 * scale).round() as u8;
             }
         }
-        
+
         lut
     }
 
     /// エッジ検出（Sobelフィルタ）
     pub fn sobel_edge_magnitude(pixels: &[[u8; 3]; 3]) -> u8 {
-        let gx = [
-            [-1, 0, 1],
-            [-2, 0, 2],
-            [-1, 0, 1],
-        ];
-        
-        let gy = [
-            [-1, -2, -1],
-            [0, 0, 0],
-            [1, 2, 1],
-        ];
-        
+        let gx = [[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]];
+
+        let gy = [[-1, -2, -1], [0, 0, 0], [1, 2, 1]];
+
         let mut sum_x = 0i32;
         let mut sum_y = 0i32;
-        
+
         for i in 0..3 {
             for j in 0..3 {
                 let pixel_value = pixels[i][j] as i32;
@@ -187,7 +182,7 @@ impl ImageProcessingService {
                 sum_y += pixel_value * gy[i][j];
             }
         }
-        
+
         let magnitude = ((sum_x * sum_x + sum_y * sum_y) as f32).sqrt();
         magnitude.clamp(0.0, 255.0) as u8
     }

@@ -2,7 +2,7 @@ use crate::domain::hardware::{
     BoardModel, BoardRepository, HardwareError, SystemdService, SystemdServiceRepository,
     UsbGadget, UsbGadgetRepository,
 };
-use tracing::{info, warn, debug};
+use tracing::{debug, info, warn};
 
 pub struct SetupUsbGadgetUseCase<BR, UR, SR> {
     board_repo: BR,
@@ -40,7 +40,7 @@ where
         // 3. カーネルモジュールの確認とロード
         info!("カーネルモジュールを確認中...");
         self.board_repo.check_kernel_modules(&mut board).await?;
-        
+
         let required_modules = board.required_modules();
         if !required_modules.is_empty() {
             info!("必要なカーネルモジュールをロード中...");
@@ -59,7 +59,7 @@ where
         // 5. USB Gadgetの作成と設定
         info!("USB Gadgetを作成中...");
         let mut gadget = UsbGadget::nintendo_controller();
-        
+
         // 既存のGadgetがあるか確認
         match self.gadget_repo.get_gadget_state(&gadget.id).await {
             Ok(existing) if existing.is_active() && !force => {
@@ -92,11 +92,11 @@ where
         // 6. systemdサービスの設定
         info!("systemdサービスを設定中...");
         let mut service = SystemdService::nintendo_controller_service();
-        
+
         self.service_repo.create_service(&service).await?;
         self.service_repo.enable_service(&mut service).await?;
         self.service_repo.reload_daemon().await?;
-        
+
         if force {
             self.service_repo.start_service(&mut service).await?;
             info!("systemdサービスが開始されました");
@@ -133,8 +133,22 @@ impl SetupResult {
     pub fn summary(&self) -> String {
         let mut lines = vec![
             format!("ボードモデル: {}", self.board_model),
-            format!("USB Gadget作成: {}", if self.gadget_created { "成功" } else { "スキップ" }),
-            format!("サービス設定: {}", if self.service_installed { "成功" } else { "スキップ" }),
+            format!(
+                "USB Gadget作成: {}",
+                if self.gadget_created {
+                    "成功"
+                } else {
+                    "スキップ"
+                }
+            ),
+            format!(
+                "サービス設定: {}",
+                if self.service_installed {
+                    "成功"
+                } else {
+                    "スキップ"
+                }
+            ),
         ];
 
         if self.reboot_required {

@@ -71,7 +71,7 @@ impl ProController {
             ActionType::MoveLeftStick(pos) => self.move_left_stick(*pos),
             ActionType::MoveRightStick(pos) => self.move_right_stick(*pos),
             ActionType::SetReport(report) => self.current_state = *report,
-            ActionType::Wait => {}, // No state change
+            ActionType::Wait => {} // No state change
         }
     }
 
@@ -122,7 +122,7 @@ impl ControllerSession {
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()
-                .as_millis() as u64
+                .as_millis() as u64,
         );
         self.next_command();
     }
@@ -153,7 +153,10 @@ impl ControllerSession {
     }
 
     pub fn current_action(&self) -> Option<&ControllerAction> {
-        self.current_command.as_ref()?.sequence.get(self.current_action_index)
+        self.current_command
+            .as_ref()?
+            .sequence
+            .get(self.current_action_index)
     }
 
     pub fn advance_action(&mut self) -> bool {

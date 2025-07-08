@@ -33,10 +33,7 @@ impl Board {
     }
 
     pub fn required_modules(&self) -> Vec<&KernelModule> {
-        self.kernel_modules
-            .iter()
-            .filter(|m| !m.loaded)
-            .collect()
+        self.kernel_modules.iter().filter(|m| !m.loaded).collect()
     }
 }
 

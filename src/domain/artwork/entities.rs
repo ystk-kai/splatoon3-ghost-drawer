@@ -1,14 +1,14 @@
 //! アートワーク集約のエンティティ
-//! 
+//!
 //! 画像データの管理、変換、検証に関するエンティティを定義
 
-use crate::domain::shared::value_objects::{Coordinates, Color, Timestamp};
+use crate::domain::shared::value_objects::{Color, Coordinates, Timestamp};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt;
 use std::str::FromStr;
+use tracing::{debug, error, info, instrument, warn};
 use uuid::Uuid;
-use tracing::{info, warn, error, debug, instrument};
 
 /// アートワークID
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -27,8 +27,7 @@ impl ArtworkId {
 
     /// 文字列から作成
     pub fn parse(s: &str) -> Result<Self, String> {
-        let uuid = Uuid::parse_str(s)
-            .map_err(|e| format!("Invalid UUID format: {}", e))?;
+        let uuid = Uuid::parse_str(s).map_err(|e| format!("Invalid UUID format: {}", e))?;
         Ok(Self(uuid))
     }
 
@@ -125,7 +124,7 @@ impl ArtworkMetadata {
 }
 
 /// アートワークエンティティ
-/// 
+///
 /// 画像データとメタデータを管理する集約ルート
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Artwork {
@@ -153,7 +152,7 @@ impl Artwork {
             updated_at: now,
             version: 1,
         };
-        
+
         info!(
             artwork_id = %artwork.id,
             name = %artwork.metadata.name,
@@ -163,7 +162,7 @@ impl Artwork {
             drawable_dots = %artwork.drawable_dots(),
             "アートワークが作成されました"
         );
-        
+
         artwork
     }
 
@@ -192,11 +191,11 @@ impl Artwork {
         debug!("キャンバスを更新中");
         let old_dots = self.total_dots();
         let old_drawable = self.drawable_dots();
-        
+
         self.canvas = canvas;
         self.updated_at = Timestamp::now();
         self.version += 1;
-        
+
         info!(
             artwork_id = %self.id,
             old_total_dots = %old_dots,
@@ -213,11 +212,11 @@ impl Artwork {
     pub fn update_metadata(&mut self, metadata: ArtworkMetadata) {
         debug!("メタデータを更新中");
         let old_name = self.metadata.name.clone();
-        
+
         self.metadata = metadata;
         self.updated_at = Timestamp::now();
         self.version += 1;
-        
+
         info!(
             artwork_id = %self.id,
             old_name = %old_name,
@@ -234,7 +233,11 @@ impl Artwork {
 
     /// アートワークの描画可能ドット数を取得
     pub fn drawable_dots(&self) -> usize {
-        self.canvas.dots.values().filter(|dot| dot.is_drawable()).count()
+        self.canvas
+            .dots
+            .values()
+            .filter(|dot| dot.is_drawable())
+            .count()
     }
 
     /// アートワークの完成度を計算（0.0-1.0）
@@ -243,7 +246,12 @@ impl Artwork {
         if total == 0 {
             return 1.0;
         }
-        let painted = self.canvas.dots.values().filter(|dot| dot.is_painted).count();
+        let painted = self
+            .canvas
+            .dots
+            .values()
+            .filter(|dot| dot.is_painted)
+            .count();
         painted as f64 / total as f64
     }
 
@@ -261,14 +269,14 @@ impl Artwork {
         let total_dots = self.total_dots() as f64;
         let drawable_dots = self.drawable_dots() as f64;
         let canvas_size = (self.canvas.width as f64) * (self.canvas.height as f64);
-        
+
         if canvas_size == 0.0 {
             return 0.0;
         }
 
         let density = drawable_dots / canvas_size;
         let coverage = drawable_dots / total_dots.max(1.0);
-        
+
         (density + coverage) / 2.0
     }
 
@@ -276,12 +284,16 @@ impl Artwork {
     pub fn statistics(&self) -> ArtworkStatistics {
         let total_dots = self.total_dots();
         let drawable_dots = self.drawable_dots();
-        let painted_dots = self.canvas.dots.values().filter(|dot| dot.is_painted).count();
-        
-        let colors: std::collections::HashSet<Color> = self.canvas.dots.values()
-            .map(|dot| dot.color)
-            .collect();
-        
+        let painted_dots = self
+            .canvas
+            .dots
+            .values()
+            .filter(|dot| dot.is_painted)
+            .count();
+
+        let colors: std::collections::HashSet<Color> =
+            self.canvas.dots.values().map(|dot| dot.color).collect();
+
         ArtworkStatistics {
             total_dots,
             drawable_dots,
@@ -306,7 +318,7 @@ impl Artwork {
     #[instrument(skip(self), fields(artwork_id = %self.id, name = %self.metadata.name))]
     pub fn validate(&self) -> Result<(), ArtworkValidationError> {
         debug!("アートワークの検証を開始");
-        
+
         // 名前の検証
         debug!("名前の検証: '{}'", self.metadata.name);
         if self.metadata.name.trim().is_empty() {
@@ -315,9 +327,15 @@ impl Artwork {
         }
 
         // キャンバスサイズの検証
-        debug!("キャンバスサイズの検証: {}x{}", self.canvas.width, self.canvas.height);
+        debug!(
+            "キャンバスサイズの検証: {}x{}",
+            self.canvas.width, self.canvas.height
+        );
         if self.canvas.width == 0 || self.canvas.height == 0 {
-            error!("無効なキャンバスサイズ: {}x{}", self.canvas.width, self.canvas.height);
+            error!(
+                "無効なキャンバスサイズ: {}x{}",
+                self.canvas.width, self.canvas.height
+            );
             return Err(ArtworkValidationError::InvalidCanvasSize);
         }
 
@@ -377,7 +395,7 @@ pub enum ArtworkValidationError {
 }
 
 /// キャンバスエンティティ
-/// 
+///
 /// 320x120の描画領域を表現
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Canvas {
@@ -452,10 +470,7 @@ impl Canvas {
 
     /// 描画済みドットのリストを取得
     pub fn painted_dots(&self) -> Vec<(&Coordinates, &Dot)> {
-        self.dots
-            .iter()
-            .filter(|(_, dot)| dot.is_painted)
-            .collect()
+        self.dots.iter().filter(|(_, dot)| dot.is_painted).collect()
     }
 
     /// 未描画ドットのリストを取得
@@ -478,20 +493,27 @@ impl Canvas {
         }
 
         // 新しいサイズに収まらないドットを削除
-        self.dots.retain(|coord, _| coord.is_within_bounds(new_width, new_height));
-        
+        self.dots
+            .retain(|coord, _| coord.is_within_bounds(new_width, new_height));
+
         self.width = new_width;
         self.height = new_height;
         Ok(())
     }
 
     /// 指定された領域のドットを取得
-    pub fn get_region(&self, top_left: Coordinates, bottom_right: Coordinates) -> Vec<(&Coordinates, &Dot)> {
+    pub fn get_region(
+        &self,
+        top_left: Coordinates,
+        bottom_right: Coordinates,
+    ) -> Vec<(&Coordinates, &Dot)> {
         self.dots
             .iter()
             .filter(|(coord, _)| {
-                coord.x >= top_left.x && coord.x <= bottom_right.x &&
-                coord.y >= top_left.y && coord.y <= bottom_right.y
+                coord.x >= top_left.x
+                    && coord.x <= bottom_right.x
+                    && coord.y >= top_left.y
+                    && coord.y <= bottom_right.y
             })
             .collect()
     }
@@ -508,13 +530,14 @@ impl Canvas {
     /// キャンバスを別のキャンバスとマージ
     pub fn merge(&mut self, other: &Canvas, offset: Coordinates) -> Result<(), CanvasError> {
         for (coord, dot) in &other.dots {
-            let new_coord = coord.move_by(offset.x as i16, offset.y as i16)
+            let new_coord = coord
+                .move_by(offset.x as i16, offset.y as i16)
                 .ok_or(CanvasError::OutOfBounds(*coord))?;
-            
+
             if !self.is_valid_coordinate(&new_coord) {
                 continue; // 範囲外のドットはスキップ
             }
-            
+
             self.dots.insert(new_coord, dot.clone());
         }
         Ok(())
@@ -531,7 +554,7 @@ pub enum CanvasError {
 }
 
 /// ドットエンティティ
-/// 
+///
 /// キャンバス上の個別ドットを表現
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Dot {
@@ -633,8 +656,9 @@ impl Dot {
     /// ドットを他のドットとブレンド
     pub fn blend_with(&self, other: &Dot, ratio: f64) -> Dot {
         let blended_color = self.color.blend(&other.color, ratio);
-        let blended_opacity = (self.opacity as f64 * (1.0 - ratio) + other.opacity as f64 * ratio) as u8;
-        
+        let blended_opacity =
+            (self.opacity as f64 * (1.0 - ratio) + other.opacity as f64 * ratio) as u8;
+
         Dot::new(blended_color, blended_opacity)
     }
 }
@@ -648,11 +672,11 @@ mod tests {
         let id1 = ArtworkId::generate();
         let id2 = ArtworkId::generate();
         assert_ne!(id1, id2);
-        
+
         let uuid = Uuid::new_v4();
         let id_from_uuid = ArtworkId::from_uuid(uuid);
         assert_eq!(id_from_uuid.as_uuid(), uuid);
-        
+
         let id_str = id1.as_str();
         let id_from_str = ArtworkId::from_str(&id_str).unwrap();
         assert_eq!(id1, id_from_str);
@@ -663,10 +687,10 @@ mod tests {
         let metadata = ArtworkMetadata::new("Test Artwork".to_string())
             .with_description("A test artwork".to_string())
             .with_tags(vec!["test".to_string(), "sample".to_string()]);
-        
+
         let canvas = Canvas::splatoon3_standard();
         let artwork = Artwork::new(metadata, "png".to_string(), canvas);
-        
+
         assert_eq!(artwork.metadata.name, "Test Artwork");
         assert_eq!(artwork.original_format, "png");
         assert_eq!(artwork.canvas.width, 320);
@@ -682,11 +706,11 @@ mod tests {
 
         assert!(canvas.set_dot(coord, dot).is_ok());
         assert!(canvas.get_dot(&coord).is_some());
-        
+
         let invalid_coord = Coordinates::new(15, 15);
         let invalid_dot = Dot::white();
         assert!(canvas.set_dot(invalid_coord, invalid_dot).is_err());
-        
+
         assert_eq!(canvas.dots.len(), 1);
         assert_eq!(canvas.drawable_dots().len(), 1);
         assert_eq!(canvas.painted_dots().len(), 0);
@@ -698,12 +722,12 @@ mod tests {
         assert!(dot.is_drawable());
         assert!(dot.is_visible());
         assert!(!dot.is_painted);
-        
+
         dot.mark_as_painted();
         assert!(!dot.is_drawable());
         assert!(dot.is_painted);
         assert!(dot.painted_at.is_some());
-        
+
         dot.reset_paint_status();
         assert!(dot.is_drawable());
         assert!(!dot.is_painted);
@@ -714,15 +738,21 @@ mod tests {
     fn test_artwork_statistics() {
         let metadata = ArtworkMetadata::new("Test".to_string());
         let mut canvas = Canvas::new(5, 5);
-        
+
         // いくつかのドットを追加
-        canvas.set_dot(Coordinates::new(0, 0), Dot::black()).unwrap();
-        canvas.set_dot(Coordinates::new(1, 1), Dot::white()).unwrap();
-        canvas.set_dot(Coordinates::new(2, 2), Dot::new(Color::red(), 255)).unwrap();
-        
+        canvas
+            .set_dot(Coordinates::new(0, 0), Dot::black())
+            .unwrap();
+        canvas
+            .set_dot(Coordinates::new(1, 1), Dot::white())
+            .unwrap();
+        canvas
+            .set_dot(Coordinates::new(2, 2), Dot::new(Color::red(), 255))
+            .unwrap();
+
         let artwork = Artwork::new(metadata, "png".to_string(), canvas);
         let stats = artwork.statistics();
-        
+
         assert_eq!(stats.total_dots, 3);
         assert_eq!(stats.drawable_dots, 3);
         assert_eq!(stats.painted_dots, 0);
@@ -734,14 +764,18 @@ mod tests {
     fn test_canvas_merge() {
         let mut canvas1 = Canvas::new(10, 10);
         let mut canvas2 = Canvas::new(5, 5);
-        
-        canvas1.set_dot(Coordinates::new(0, 0), Dot::black()).unwrap();
-        canvas2.set_dot(Coordinates::new(0, 0), Dot::new(Color::red(), 255)).unwrap();
-        
+
+        canvas1
+            .set_dot(Coordinates::new(0, 0), Dot::black())
+            .unwrap();
+        canvas2
+            .set_dot(Coordinates::new(0, 0), Dot::new(Color::red(), 255))
+            .unwrap();
+
         let offset = Coordinates::new(2, 2);
         canvas1.merge(&canvas2, offset).unwrap();
-        
+
         assert_eq!(canvas1.dots.len(), 2);
         assert!(canvas1.get_dot(&Coordinates::new(2, 2)).is_some());
     }
-} 
+}

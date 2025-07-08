@@ -118,20 +118,48 @@ impl ButtonState {
 
     pub fn pressed_buttons(&self) -> Vec<Button> {
         let mut buttons = Vec::new();
-        if self.is_pressed(Button::Y) { buttons.push(Button::Y); }
-        if self.is_pressed(Button::B) { buttons.push(Button::B); }
-        if self.is_pressed(Button::A) { buttons.push(Button::A); }
-        if self.is_pressed(Button::X) { buttons.push(Button::X); }
-        if self.is_pressed(Button::L) { buttons.push(Button::L); }
-        if self.is_pressed(Button::R) { buttons.push(Button::R); }
-        if self.is_pressed(Button::ZL) { buttons.push(Button::ZL); }
-        if self.is_pressed(Button::ZR) { buttons.push(Button::ZR); }
-        if self.is_pressed(Button::MINUS) { buttons.push(Button::MINUS); }
-        if self.is_pressed(Button::PLUS) { buttons.push(Button::PLUS); }
-        if self.is_pressed(Button::L_STICK) { buttons.push(Button::L_STICK); }
-        if self.is_pressed(Button::R_STICK) { buttons.push(Button::R_STICK); }
-        if self.is_pressed(Button::HOME) { buttons.push(Button::HOME); }
-        if self.is_pressed(Button::CAPTURE) { buttons.push(Button::CAPTURE); }
+        if self.is_pressed(Button::Y) {
+            buttons.push(Button::Y);
+        }
+        if self.is_pressed(Button::B) {
+            buttons.push(Button::B);
+        }
+        if self.is_pressed(Button::A) {
+            buttons.push(Button::A);
+        }
+        if self.is_pressed(Button::X) {
+            buttons.push(Button::X);
+        }
+        if self.is_pressed(Button::L) {
+            buttons.push(Button::L);
+        }
+        if self.is_pressed(Button::R) {
+            buttons.push(Button::R);
+        }
+        if self.is_pressed(Button::ZL) {
+            buttons.push(Button::ZL);
+        }
+        if self.is_pressed(Button::ZR) {
+            buttons.push(Button::ZR);
+        }
+        if self.is_pressed(Button::MINUS) {
+            buttons.push(Button::MINUS);
+        }
+        if self.is_pressed(Button::PLUS) {
+            buttons.push(Button::PLUS);
+        }
+        if self.is_pressed(Button::L_STICK) {
+            buttons.push(Button::L_STICK);
+        }
+        if self.is_pressed(Button::R_STICK) {
+            buttons.push(Button::R_STICK);
+        }
+        if self.is_pressed(Button::HOME) {
+            buttons.push(Button::HOME);
+        }
+        if self.is_pressed(Button::CAPTURE) {
+            buttons.push(Button::CAPTURE);
+        }
         buttons
     }
 
@@ -154,6 +182,18 @@ pub struct HidReport {
     pub right_stick: StickPosition,
 }
 
+/// Nintendo Switch Pro Controllerの完全なHIDレポート
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ProControllerReport {
+    pub report_id: u8,
+    pub timer: u8,
+    pub battery_connection: u8,
+    pub button_status: [u8; 3],
+    pub left_stick: [u8; 3],
+    pub right_stick: [u8; 3],
+    pub vibrator_report: u8,
+}
+
 impl HidReport {
     pub fn new() -> Self {
         Self {
@@ -169,13 +209,117 @@ impl HidReport {
         [
             button_bytes[0],
             button_bytes[1],
-            self.dpad.value(),
             self.left_stick.x,
             self.left_stick.y,
             self.right_stick.x,
             self.right_stick.y,
-            0x00, // Padding
+            self.dpad.value(),
+            0x00, // Vendor specific
         ]
+    }
+
+    /// Pro Controllerの完全な形式に変換
+    pub fn to_pro_controller_bytes(&self) -> [u8; 64] {
+        let mut report = [0u8; 64];
+
+        // Report ID 0x30 (標準入力レポート)
+        report[0] = 0x30;
+
+        // Timer (インクリメントされる)
+        static mut TIMER: u8 = 0;
+        unsafe {
+            report[1] = TIMER;
+            TIMER = TIMER.wrapping_add(1);
+        }
+
+        // Battery level (high nibble) | Connection info (low nibble)
+        report[2] = 0x90; // Full battery, powered
+
+        // Button status (3 bytes)
+        // Pro Controllerのボタン配置に合わせて変換
+        let buttons = self.buttons.raw_value();
+
+        // Byte 3: Y, X, B, A, SR, SL, R, ZR
+        report[3] = 0;
+        if buttons & Button::Y.value() != 0 {
+            report[3] |= 0x01;
+        }
+        if buttons & Button::X.value() != 0 {
+            report[3] |= 0x02;
+        }
+        if buttons & Button::B.value() != 0 {
+            report[3] |= 0x04;
+        }
+        if buttons & Button::A.value() != 0 {
+            report[3] |= 0x08;
+        }
+        if buttons & Button::R.value() != 0 {
+            report[3] |= 0x40;
+        }
+        if buttons & Button::ZR.value() != 0 {
+            report[3] |= 0x80;
+        }
+
+        // Byte 4: Minus, Plus, R3, L3, Home, Capture, -, -
+        report[4] = 0;
+        if buttons & Button::MINUS.value() != 0 {
+            report[4] |= 0x01;
+        }
+        if buttons & Button::PLUS.value() != 0 {
+            report[4] |= 0x02;
+        }
+        if buttons & Button::R_STICK.value() != 0 {
+            report[4] |= 0x04;
+        }
+        if buttons & Button::L_STICK.value() != 0 {
+            report[4] |= 0x08;
+        }
+        if buttons & Button::HOME.value() != 0 {
+            report[4] |= 0x10;
+        }
+        if buttons & Button::CAPTURE.value() != 0 {
+            report[4] |= 0x20;
+        }
+
+        // Byte 5: Down, Up, Right, Left, SR, SL, L, ZL
+        report[5] = 0;
+        // D-pad
+        match self.dpad.value() {
+            0x00 => report[5] |= 0x02, // Up
+            0x01 => report[5] |= 0x06, // Up-Right
+            0x02 => report[5] |= 0x04, // Right
+            0x03 => report[5] |= 0x05, // Down-Right
+            0x04 => report[5] |= 0x01, // Down
+            0x05 => report[5] |= 0x09, // Down-Left
+            0x06 => report[5] |= 0x08, // Left
+            0x07 => report[5] |= 0x0A, // Up-Left
+            _ => {}                    // Neutral
+        }
+        if buttons & Button::L.value() != 0 {
+            report[5] |= 0x40;
+        }
+        if buttons & Button::ZL.value() != 0 {
+            report[5] |= 0x80;
+        }
+
+        // Left stick data (3 bytes, 12-bit values)
+        let lx = ((self.left_stick.x as u16) * 4095 / 255) as u16;
+        let ly = ((self.left_stick.y as u16) * 4095 / 255) as u16;
+        report[6] = lx as u8;
+        report[7] = ((lx >> 8) & 0x0F) as u8 | ((ly & 0x0F) << 4) as u8;
+        report[8] = (ly >> 4) as u8;
+
+        // Right stick data (3 bytes, 12-bit values)
+        let rx = ((self.right_stick.x as u16) * 4095 / 255) as u16;
+        let ry = ((self.right_stick.y as u16) * 4095 / 255) as u16;
+        report[9] = rx as u8;
+        report[10] = ((rx >> 8) & 0x0F) as u8 | ((ry & 0x0F) << 4) as u8;
+        report[11] = (ry >> 4) as u8;
+
+        // Vibrator report
+        report[12] = 0x00;
+
+        report
     }
 
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, String> {

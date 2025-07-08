@@ -12,9 +12,9 @@
 //! - **Interface Layer**: ユーザーインターフェース
 
 // Rust 2024 Edition 準拠の構造
-pub mod domain;
-pub mod debug;
 pub mod application;
+pub mod debug;
+pub mod domain;
 pub mod infrastructure;
 pub mod interfaces;
 
@@ -38,4 +38,4 @@ impl Default for AppConfig {
             debug: true,
         }
     }
-} 
+}

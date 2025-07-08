@@ -1,5 +1,5 @@
 //! ドメインイベント
-//! 
+//!
 //! アートワーク集約で発生するドメインイベントを定義
 
 use crate::domain::artwork::entities::{ArtworkId, ArtworkMetadata, Canvas};
@@ -395,10 +395,11 @@ impl ArtworkEvent {
     pub fn should_notify_user(&self) -> bool {
         match self.severity() {
             EventSeverity::Error | EventSeverity::Warning => true,
-            EventSeverity::Info => matches!(self,
-                Self::PaintingStarted { .. } |
-                Self::PaintingCompleted { .. } |
-                Self::ArtworkCreated { .. }
+            EventSeverity::Info => matches!(
+                self,
+                Self::PaintingStarted { .. }
+                    | Self::PaintingCompleted { .. }
+                    | Self::ArtworkCreated { .. }
             ),
             EventSeverity::Debug => false,
         }
@@ -407,19 +408,19 @@ impl ArtworkEvent {
     /// イベントのカテゴリを取得
     pub fn category(&self) -> EventCategory {
         match self {
-            Self::ArtworkCreated { .. } |
-            Self::ArtworkMetadataUpdated { .. } |
-            Self::ArtworkCanvasUpdated { .. } |
-            Self::ArtworkDeleted { .. } |
-            Self::ArtworkReset { .. } => EventCategory::Artwork,
-            
-            Self::PaintingStarted { .. } |
-            Self::DotPainted { .. } |
-            Self::PaintingPaused { .. } |
-            Self::PaintingResumed { .. } |
-            Self::PaintingCompleted { .. } |
-            Self::PaintingCancelled { .. } |
-            Self::PaintingErrorOccurred { .. } => EventCategory::Painting,
+            Self::ArtworkCreated { .. }
+            | Self::ArtworkMetadataUpdated { .. }
+            | Self::ArtworkCanvasUpdated { .. }
+            | Self::ArtworkDeleted { .. }
+            | Self::ArtworkReset { .. } => EventCategory::Artwork,
+
+            Self::PaintingStarted { .. }
+            | Self::DotPainted { .. }
+            | Self::PaintingPaused { .. }
+            | Self::PaintingResumed { .. }
+            | Self::PaintingCompleted { .. }
+            | Self::PaintingCancelled { .. }
+            | Self::PaintingErrorOccurred { .. } => EventCategory::Painting,
         }
     }
 
@@ -437,40 +438,89 @@ impl ArtworkEvent {
         match self {
             Self::ArtworkCreated { metadata, .. } => {
                 format!("アートワーク「{}」が作成されました", metadata.name)
-            },
+            }
             Self::ArtworkMetadataUpdated { new_metadata, .. } => {
-                format!("アートワーク「{}」のメタデータが更新されました", new_metadata.name)
-            },
+                format!(
+                    "アートワーク「{}」のメタデータが更新されました",
+                    new_metadata.name
+                )
+            }
             Self::ArtworkCanvasUpdated { drawable_dots, .. } => {
-                format!("キャンバスが更新されました（描画可能ドット: {}個）", drawable_dots)
-            },
+                format!(
+                    "キャンバスが更新されました（描画可能ドット: {}個）",
+                    drawable_dots
+                )
+            }
             Self::ArtworkDeleted { artwork_name, .. } => {
                 format!("アートワーク「{}」が削除されました", artwork_name)
-            },
-            Self::PaintingStarted { total_dots_to_paint, .. } => {
+            }
+            Self::PaintingStarted {
+                total_dots_to_paint,
+                ..
+            } => {
                 format!("描画を開始しました（{}個のドット）", total_dots_to_paint)
-            },
-            Self::DotPainted { coordinates, sequence_number, .. } => {
-                format!("ドット #{} を座標 {} に描画しました", sequence_number, coordinates)
-            },
-            Self::PaintingPaused { completion_ratio, .. } => {
-                format!("描画を一時停止しました（進捗: {:.1}%）", completion_ratio * 100.0)
-            },
+            }
+            Self::DotPainted {
+                coordinates,
+                sequence_number,
+                ..
+            } => {
+                format!(
+                    "ドット #{} を座標 {} に描画しました",
+                    sequence_number, coordinates
+                )
+            }
+            Self::PaintingPaused {
+                completion_ratio, ..
+            } => {
+                format!(
+                    "描画を一時停止しました（進捗: {:.1}%）",
+                    completion_ratio * 100.0
+                )
+            }
             Self::PaintingResumed { remaining_dots, .. } => {
                 format!("描画を再開しました（残り: {}個）", remaining_dots)
-            },
-            Self::PaintingCompleted { total_dots_painted, painting_duration_seconds, .. } => {
-                format!("描画が完了しました（{}個のドット、{}秒）", total_dots_painted, painting_duration_seconds)
-            },
-            Self::PaintingCancelled { completion_ratio, reason, .. } => {
-                format!("描画がキャンセルされました（進捗: {:.1}%、理由: {}）", completion_ratio * 100.0, reason)
-            },
-            Self::PaintingErrorOccurred { error_message, retry_count, .. } => {
-                format!("描画エラーが発生しました（リトライ: {}回、エラー: {}）", retry_count, error_message)
-            },
-            Self::ArtworkReset { previous_completion_ratio, .. } => {
-                format!("アートワークがリセットされました（以前の進捗: {:.1}%）", previous_completion_ratio * 100.0)
-            },
+            }
+            Self::PaintingCompleted {
+                total_dots_painted,
+                painting_duration_seconds,
+                ..
+            } => {
+                format!(
+                    "描画が完了しました（{}個のドット、{}秒）",
+                    total_dots_painted, painting_duration_seconds
+                )
+            }
+            Self::PaintingCancelled {
+                completion_ratio,
+                reason,
+                ..
+            } => {
+                format!(
+                    "描画がキャンセルされました（進捗: {:.1}%、理由: {}）",
+                    completion_ratio * 100.0,
+                    reason
+                )
+            }
+            Self::PaintingErrorOccurred {
+                error_message,
+                retry_count,
+                ..
+            } => {
+                format!(
+                    "描画エラーが発生しました（リトライ: {}回、エラー: {}）",
+                    retry_count, error_message
+                )
+            }
+            Self::ArtworkReset {
+                previous_completion_ratio,
+                ..
+            } => {
+                format!(
+                    "アートワークがリセットされました（以前の進捗: {:.1}%）",
+                    previous_completion_ratio * 100.0
+                )
+            }
         }
     }
 }
@@ -495,69 +545,69 @@ impl DomainEvent for ArtworkEvent {
 
     fn event_id(&self) -> &EventId {
         match self {
-            Self::ArtworkCreated { event_id, .. } |
-            Self::ArtworkMetadataUpdated { event_id, .. } |
-            Self::ArtworkCanvasUpdated { event_id, .. } |
-            Self::ArtworkDeleted { event_id, .. } |
-            Self::PaintingStarted { event_id, .. } |
-            Self::DotPainted { event_id, .. } |
-            Self::PaintingPaused { event_id, .. } |
-            Self::PaintingResumed { event_id, .. } |
-            Self::PaintingCompleted { event_id, .. } |
-            Self::PaintingCancelled { event_id, .. } |
-            Self::PaintingErrorOccurred { event_id, .. } |
-            Self::ArtworkReset { event_id, .. } => event_id,
+            Self::ArtworkCreated { event_id, .. }
+            | Self::ArtworkMetadataUpdated { event_id, .. }
+            | Self::ArtworkCanvasUpdated { event_id, .. }
+            | Self::ArtworkDeleted { event_id, .. }
+            | Self::PaintingStarted { event_id, .. }
+            | Self::DotPainted { event_id, .. }
+            | Self::PaintingPaused { event_id, .. }
+            | Self::PaintingResumed { event_id, .. }
+            | Self::PaintingCompleted { event_id, .. }
+            | Self::PaintingCancelled { event_id, .. }
+            | Self::PaintingErrorOccurred { event_id, .. }
+            | Self::ArtworkReset { event_id, .. } => event_id,
         }
     }
 
     fn occurred_at(&self) -> Timestamp {
         match self {
-            Self::ArtworkCreated { occurred_at, .. } |
-            Self::ArtworkMetadataUpdated { occurred_at, .. } |
-            Self::ArtworkCanvasUpdated { occurred_at, .. } |
-            Self::ArtworkDeleted { occurred_at, .. } |
-            Self::PaintingStarted { occurred_at, .. } |
-            Self::DotPainted { occurred_at, .. } |
-            Self::PaintingPaused { occurred_at, .. } |
-            Self::PaintingResumed { occurred_at, .. } |
-            Self::PaintingCompleted { occurred_at, .. } |
-            Self::PaintingCancelled { occurred_at, .. } |
-            Self::PaintingErrorOccurred { occurred_at, .. } |
-            Self::ArtworkReset { occurred_at, .. } => *occurred_at,
+            Self::ArtworkCreated { occurred_at, .. }
+            | Self::ArtworkMetadataUpdated { occurred_at, .. }
+            | Self::ArtworkCanvasUpdated { occurred_at, .. }
+            | Self::ArtworkDeleted { occurred_at, .. }
+            | Self::PaintingStarted { occurred_at, .. }
+            | Self::DotPainted { occurred_at, .. }
+            | Self::PaintingPaused { occurred_at, .. }
+            | Self::PaintingResumed { occurred_at, .. }
+            | Self::PaintingCompleted { occurred_at, .. }
+            | Self::PaintingCancelled { occurred_at, .. }
+            | Self::PaintingErrorOccurred { occurred_at, .. }
+            | Self::ArtworkReset { occurred_at, .. } => *occurred_at,
         }
     }
 
     fn version(&self) -> u32 {
         match self {
-            Self::ArtworkCreated { version, .. } |
-            Self::ArtworkMetadataUpdated { version, .. } |
-            Self::ArtworkCanvasUpdated { version, .. } |
-            Self::ArtworkDeleted { version, .. } |
-            Self::PaintingStarted { version, .. } |
-            Self::DotPainted { version, .. } |
-            Self::PaintingPaused { version, .. } |
-            Self::PaintingResumed { version, .. } |
-            Self::PaintingCompleted { version, .. } |
-            Self::PaintingCancelled { version, .. } |
-            Self::PaintingErrorOccurred { version, .. } |
-            Self::ArtworkReset { version, .. } => *version,
+            Self::ArtworkCreated { version, .. }
+            | Self::ArtworkMetadataUpdated { version, .. }
+            | Self::ArtworkCanvasUpdated { version, .. }
+            | Self::ArtworkDeleted { version, .. }
+            | Self::PaintingStarted { version, .. }
+            | Self::DotPainted { version, .. }
+            | Self::PaintingPaused { version, .. }
+            | Self::PaintingResumed { version, .. }
+            | Self::PaintingCompleted { version, .. }
+            | Self::PaintingCancelled { version, .. }
+            | Self::PaintingErrorOccurred { version, .. }
+            | Self::ArtworkReset { version, .. } => *version,
         }
     }
 
     fn aggregate_id(&self) -> String {
         match self {
-            Self::ArtworkCreated { artwork_id, .. } |
-            Self::ArtworkMetadataUpdated { artwork_id, .. } |
-            Self::ArtworkCanvasUpdated { artwork_id, .. } |
-            Self::ArtworkDeleted { artwork_id, .. } |
-            Self::PaintingStarted { artwork_id, .. } |
-            Self::DotPainted { artwork_id, .. } |
-            Self::PaintingPaused { artwork_id, .. } |
-            Self::PaintingResumed { artwork_id, .. } |
-            Self::PaintingCompleted { artwork_id, .. } |
-            Self::PaintingCancelled { artwork_id, .. } |
-            Self::PaintingErrorOccurred { artwork_id, .. } |
-            Self::ArtworkReset { artwork_id, .. } => artwork_id.as_str(),
+            Self::ArtworkCreated { artwork_id, .. }
+            | Self::ArtworkMetadataUpdated { artwork_id, .. }
+            | Self::ArtworkCanvasUpdated { artwork_id, .. }
+            | Self::ArtworkDeleted { artwork_id, .. }
+            | Self::PaintingStarted { artwork_id, .. }
+            | Self::DotPainted { artwork_id, .. }
+            | Self::PaintingPaused { artwork_id, .. }
+            | Self::PaintingResumed { artwork_id, .. }
+            | Self::PaintingCompleted { artwork_id, .. }
+            | Self::PaintingCancelled { artwork_id, .. }
+            | Self::PaintingErrorOccurred { artwork_id, .. }
+            | Self::ArtworkReset { artwork_id, .. } => artwork_id.as_str(),
         }
     }
 
@@ -567,18 +617,18 @@ impl DomainEvent for ArtworkEvent {
 
     fn metadata(&self) -> &EventMetadata {
         match self {
-            Self::ArtworkCreated { event_metadata, .. } |
-            Self::ArtworkMetadataUpdated { event_metadata, .. } |
-            Self::ArtworkCanvasUpdated { event_metadata, .. } |
-            Self::ArtworkDeleted { event_metadata, .. } |
-            Self::PaintingStarted { event_metadata, .. } |
-            Self::DotPainted { event_metadata, .. } |
-            Self::PaintingPaused { event_metadata, .. } |
-            Self::PaintingResumed { event_metadata, .. } |
-            Self::PaintingCompleted { event_metadata, .. } |
-            Self::PaintingCancelled { event_metadata, .. } |
-            Self::PaintingErrorOccurred { event_metadata, .. } |
-            Self::ArtworkReset { event_metadata, .. } => event_metadata,
+            Self::ArtworkCreated { event_metadata, .. }
+            | Self::ArtworkMetadataUpdated { event_metadata, .. }
+            | Self::ArtworkCanvasUpdated { event_metadata, .. }
+            | Self::ArtworkDeleted { event_metadata, .. }
+            | Self::PaintingStarted { event_metadata, .. }
+            | Self::DotPainted { event_metadata, .. }
+            | Self::PaintingPaused { event_metadata, .. }
+            | Self::PaintingResumed { event_metadata, .. }
+            | Self::PaintingCompleted { event_metadata, .. }
+            | Self::PaintingCancelled { event_metadata, .. }
+            | Self::PaintingErrorOccurred { event_metadata, .. }
+            | Self::ArtworkReset { event_metadata, .. } => event_metadata,
         }
     }
 }
@@ -662,14 +712,8 @@ mod tests {
         let color = crate::domain::shared::value_objects::Color::red();
         let event_metadata = EventMetadata::new("test".to_string());
 
-        let event = ArtworkEvent::dot_painted(
-            artwork_id.clone(),
-            coordinates,
-            color,
-            1,
-            2,
-            event_metadata,
-        );
+        let event =
+            ArtworkEvent::dot_painted(artwork_id.clone(), coordinates, color, 1, 2, event_metadata);
 
         assert_eq!(event.event_type(), "DotPainted");
         assert_eq!(event.coordinates(), Some(coordinates));
@@ -718,13 +762,7 @@ mod tests {
         let artwork_id = ArtworkId::generate();
         let event_metadata = EventMetadata::new("test".to_string());
 
-        let event = ArtworkEvent::painting_completed(
-            artwork_id,
-            100,
-            300,
-            10,
-            event_metadata,
-        );
+        let event = ArtworkEvent::painting_completed(artwork_id, 100, 300, 10, event_metadata);
 
         let json = event.as_json().unwrap();
         assert!(!json.is_empty());
@@ -733,4 +771,4 @@ mod tests {
         let deserialized: ArtworkEvent = serde_json::from_str(&json).unwrap();
         assert_eq!(deserialized.event_type(), "PaintingCompleted");
     }
-} 
+}

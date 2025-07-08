@@ -1,9 +1,9 @@
 //! デバッグとログ機能
-//! 
+//!
 //! プロジェクト全体のデバッグとログ機能を提供
 
 use std::fs;
-use tracing::{info, debug, Level};
+use tracing::{Level, debug, info};
 use tracing_appender::rolling::{RollingFileAppender, Rotation};
 use tracing_subscriber::EnvFilter;
 
@@ -94,7 +94,7 @@ pub fn init_logging(config: &DebugConfig) -> Result<(), Box<dyn std::error::Erro
             &config.log_directory,
             "splatoon3-ghost-drawer.log",
         );
-        
+
         tracing_subscriber::fmt()
             .with_env_filter(env_filter)
             .with_writer(file_appender)
@@ -132,10 +132,10 @@ macro_rules! measure_time {
     }};
 }
 
-    /// デバッグ用のヘルパー関数
-    pub mod debug_helpers {
-        use tracing::{info, error, debug};
+/// デバッグ用のヘルパー関数
+pub mod debug_helpers {
     use std::collections::HashMap;
+    use tracing::{debug, error, info};
 
     /// システム情報をログに出力
     pub fn log_system_info() {
@@ -144,7 +144,7 @@ macro_rules! measure_time {
         info!("アーキテクチャ: {}", std::env::consts::ARCH);
         info!("Rustバージョン: {}", env!("CARGO_PKG_RUST_VERSION"));
         info!("プロジェクトバージョン: {}", env!("CARGO_PKG_VERSION"));
-        
+
         // メモリ使用量（利用可能な場合）
         if let Ok(memory) = get_memory_usage() {
             info!("メモリ使用量: {} MB", memory / 1024 / 1024);
@@ -227,7 +227,7 @@ macro_rules! measure_time {
                     let avg = durations.iter().sum::<u128>() / durations.len() as u128;
                     let min = *durations.iter().min().unwrap();
                     let max = *durations.iter().max().unwrap();
-                    
+
                     info!(
                         operation = name,
                         count = durations.len(),
@@ -269,4 +269,4 @@ pub mod test_helpers {
         });
         assert_eq!(result, 42);
     }
-} 
+}

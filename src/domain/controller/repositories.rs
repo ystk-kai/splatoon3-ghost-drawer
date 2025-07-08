@@ -1,7 +1,4 @@
-use super::{
-    ControllerError, ControllerMapping, ControllerSession, HidReport,
-    ProController,
-};
+use super::{ControllerError, ControllerMapping, ControllerSession, HidReport, ProController};
 use async_trait::async_trait;
 
 #[async_trait]
@@ -11,17 +8,44 @@ pub trait ControllerRepository {
     async fn update_controller(&self, controller: &ProController) -> Result<(), ControllerError>;
     async fn delete_controller(&self, id: &str) -> Result<(), ControllerError>;
     async fn list_controllers(&self) -> Result<Vec<ProController>, ControllerError>;
-    async fn connect_controller(&self, controller: &mut ProController) -> Result<(), ControllerError>;
-    async fn disconnect_controller(&self, controller: &mut ProController) -> Result<(), ControllerError>;
+    async fn connect_controller(
+        &self,
+        controller: &mut ProController,
+    ) -> Result<(), ControllerError>;
+    async fn disconnect_controller(
+        &self,
+        controller: &mut ProController,
+    ) -> Result<(), ControllerError>;
 }
 
 #[async_trait]
 pub trait HidDeviceRepository {
-    async fn write_report(&self, device_path: &str, report: &HidReport) -> Result<(), ControllerError>;
+    async fn write_report(
+        &self,
+        device_path: &str,
+        report: &HidReport,
+    ) -> Result<(), ControllerError>;
     async fn read_report(&self, device_path: &str) -> Result<HidReport, ControllerError>;
     async fn open_device(&self, device_path: &str) -> Result<(), ControllerError>;
     async fn close_device(&self, device_path: &str) -> Result<(), ControllerError>;
     async fn list_devices(&self) -> Result<Vec<String>, ControllerError>;
+
+    /// Pro Controllerの64バイトレポートを書き込む
+    async fn write_pro_controller_report(
+        &self,
+        device_path: &str,
+        report: &[u8; 64],
+    ) -> Result<(), ControllerError>;
+
+    /// USBからのコマンドを読み取る
+    async fn read_usb_command(&self, device_path: &str) -> Result<Vec<u8>, ControllerError>;
+
+    /// USBコマンドに応答する
+    async fn write_usb_response(
+        &self,
+        device_path: &str,
+        response: &[u8],
+    ) -> Result<(), ControllerError>;
 }
 
 #[async_trait]
@@ -41,5 +65,8 @@ pub trait ControllerMappingRepository {
     async fn update_mapping(&self, mapping: &ControllerMapping) -> Result<(), ControllerError>;
     async fn delete_mapping(&self, id: &str) -> Result<(), ControllerError>;
     async fn list_mappings(&self) -> Result<Vec<ControllerMapping>, ControllerError>;
-    async fn get_mappings_by_artwork(&self, artwork_id: &str) -> Result<Vec<ControllerMapping>, ControllerError>;
+    async fn get_mappings_by_artwork(
+        &self,
+        artwork_id: &str,
+    ) -> Result<Vec<ControllerMapping>, ControllerError>;
 }

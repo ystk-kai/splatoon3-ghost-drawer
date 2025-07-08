@@ -25,14 +25,18 @@ impl BoardModel {
     pub fn supports_usb_otg(&self) -> bool {
         matches!(
             self,
-            BoardModel::OrangePiZero2W | BoardModel::RaspberryPiZero2W | BoardModel::RaspberryPiZeroW
+            BoardModel::OrangePiZero2W
+                | BoardModel::RaspberryPiZero2W
+                | BoardModel::RaspberryPiZeroW
         )
     }
 
     pub fn config_file_path(&self) -> Option<&'static str> {
         match self {
             BoardModel::OrangePiZero2W => Some("/boot/armbianEnv.txt"),
-            BoardModel::RaspberryPiZero2W | BoardModel::RaspberryPiZeroW => Some("/boot/config.txt"),
+            BoardModel::RaspberryPiZero2W | BoardModel::RaspberryPiZeroW => {
+                Some("/boot/config.txt")
+            }
             BoardModel::Unknown => None,
         }
     }

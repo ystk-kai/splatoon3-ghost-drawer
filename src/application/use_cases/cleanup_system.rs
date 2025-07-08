@@ -70,46 +70,46 @@ fn is_running_as_root() -> bool {
 
 fn cleanup_usb_gadget() -> Result<(), SetupError> {
     use std::process::Command;
-    
+
     // Remove USB gadget configuration if it exists
     let gadget_path = "/sys/kernel/config/usb_gadget/g1";
-    
+
     if std::path::Path::new(gadget_path).exists() {
         // First, unbind the gadget
         let _ = Command::new("sh")
             .arg("-c")
             .arg("echo '' > /sys/kernel/config/usb_gadget/g1/UDC")
             .output();
-        
+
         // Remove configurations
         let _ = Command::new("rm")
             .arg("-rf")
             .arg("/sys/kernel/config/usb_gadget/g1/configs/c.1/hid.usb0")
             .output();
-        
+
         let _ = Command::new("rm")
             .arg("-rf")
             .arg("/sys/kernel/config/usb_gadget/g1/functions/hid.usb0")
             .output();
-        
+
         let _ = Command::new("rmdir")
             .arg("/sys/kernel/config/usb_gadget/g1/configs/c.1/strings/0x409")
             .output();
-        
+
         let _ = Command::new("rmdir")
             .arg("/sys/kernel/config/usb_gadget/g1/configs/c.1")
             .output();
-        
+
         let _ = Command::new("rmdir")
             .arg("/sys/kernel/config/usb_gadget/g1/strings/0x409")
             .output();
-        
+
         let _ = Command::new("rmdir")
             .arg("/sys/kernel/config/usb_gadget/g1")
             .output();
-        
+
         info!("USB gadget configuration removed.");
     }
-    
+
     Ok(())
 }

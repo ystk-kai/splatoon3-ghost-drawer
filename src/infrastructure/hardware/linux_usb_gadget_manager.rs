@@ -50,9 +50,7 @@ impl LinuxUsbGadgetManager {
         let output = Command::new("modprobe")
             .arg("libcomposite")
             .output()
-            .map_err(|e| {
-                SetupError::Unknown(format!("Failed to run modprobe: {}", e))
-            })?;
+            .map_err(|e| SetupError::Unknown(format!("Failed to run modprobe: {}", e)))?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -64,16 +62,14 @@ impl LinuxUsbGadgetManager {
 
     fn get_udc_name(&self) -> Result<String, SetupError> {
         let udc_dir = "/sys/class/udc";
-        
-        let entries = fs::read_dir(udc_dir).map_err(|e| {
-            SetupError::Unknown(format!("Failed to read UDC directory: {}", e))
-        })?;
+
+        let entries = fs::read_dir(udc_dir)
+            .map_err(|e| SetupError::Unknown(format!("Failed to read UDC directory: {}", e)))?;
 
         for entry in entries {
-            let entry = entry.map_err(|e| {
-                SetupError::Unknown(format!("Failed to read UDC entry: {}", e))
-            })?;
-            
+            let entry = entry
+                .map_err(|e| SetupError::Unknown(format!("Failed to read UDC entry: {}", e)))?;
+
             let name = entry.file_name().to_string_lossy().to_string();
             if !name.is_empty() {
                 info!("Found UDC: {}", name);
@@ -98,9 +94,7 @@ impl UsbGadgetManager for LinuxUsbGadgetManager {
             let output = Command::new("mount")
                 .args(["-t", "configfs", "none", "/sys/kernel/config"])
                 .output()
-                .map_err(|e| {
-                    SetupError::Unknown(format!("Failed to mount configfs: {}", e))
-                })?;
+                .map_err(|e| SetupError::Unknown(format!("Failed to mount configfs: {}", e)))?;
 
             if !output.status.success() {
                 let stderr = String::from_utf8_lossy(&output.stderr);
@@ -143,7 +137,10 @@ impl UsbGadgetManager for LinuxUsbGadgetManager {
 
         let config_strings_dir = format!("{}/strings/0x409", config_dir);
         self.create_directory(&config_strings_dir)?;
-        self.write_file(&format!("{}/configuration", config_strings_dir), "Pro Controller")?;
+        self.write_file(
+            &format!("{}/configuration", config_strings_dir),
+            "Pro Controller",
+        )?;
 
         // Create HID function
         let hid_dir = format!("{}/functions/hid.usb0", GADGET_PATH);
@@ -155,7 +152,7 @@ impl UsbGadgetManager for LinuxUsbGadgetManager {
         // Write HID report descriptor
         let report_desc = include_bytes!("../../domain/hardware/pro_controller_descriptor.bin");
         let report_desc_path = format!("{}/report_desc", hid_dir);
-        
+
         let mut file = fs::OpenOptions::new()
             .write(true)
             .truncate(true)
@@ -164,7 +161,7 @@ impl UsbGadgetManager for LinuxUsbGadgetManager {
                 error!("Failed to open report descriptor file: {}", e);
                 SetupError::FileSystemError(e)
             })?;
-        
+
         file.write_all(report_desc).map_err(|e| {
             error!("Failed to write report descriptor: {}", e);
             SetupError::FileSystemError(e)

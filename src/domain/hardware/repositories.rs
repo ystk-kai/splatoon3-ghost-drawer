@@ -1,6 +1,6 @@
 use super::{Board, HardwareError, SystemdService, UsbGadget};
-use async_trait::async_trait;
 use crate::domain::setup::repositories::SetupError;
+use async_trait::async_trait;
 
 #[async_trait]
 pub trait BoardRepository {

@@ -1,7 +1,5 @@
 use crate::domain::artwork::entities::{Artwork, Canvas};
-use crate::domain::controller::{
-    Button, ControllerAction, ControllerCommand, DPad,
-};
+use crate::domain::controller::{Button, ControllerAction, ControllerCommand, DPad};
 use crate::domain::painting::value_objects::{
     CursorDirection, DrawingCanvasConfig, DrawingPath, DrawingStrategy,
 };
@@ -31,7 +29,10 @@ impl ArtworkToCommandConverter {
 
         // 3. 描画パスを生成
         let drawing_path = self.create_drawing_path(&artwork.canvas);
-        info!("Generated drawing path with {} dots", drawing_path.coordinates.len());
+        info!(
+            "Generated drawing path with {} dots",
+            drawing_path.coordinates.len()
+        );
 
         // 4. 描画コマンドを生成
         let drawing_commands = self.create_drawing_commands(&drawing_path);
@@ -45,37 +46,55 @@ impl ArtworkToCommandConverter {
 
     /// 初期化コマンドを作成
     fn create_initialization_command(&self) -> ControllerCommand {
-        let mut command = ControllerCommand::new("Initialize")
-            .with_description("コントローラーを初期化");
+        let mut command =
+            ControllerCommand::new("Initialize").with_description("コントローラーを初期化");
 
         // Switchのメニュー表示待機
         command = command
             .add_action(ControllerAction::wait(2000))
             .add_action(ControllerAction::set_dpad(DPad::NEUTRAL, 100));
-        
+
         // カーソルを左上に移動（初期位置へ）
         // 左上に完全に移動するため、画面サイズ以上の移動を実行
+        // よりゆっくりとした動作で移動
         for _ in 0..150 {
-            command = command.add_action(ControllerAction::set_dpad(DPad::UP_LEFT, 20));
+            command = command
+                .add_action(ControllerAction::set_dpad(DPad::UP_LEFT, 50))
+                .add_action(ControllerAction::set_dpad(DPad::NEUTRAL, 50));
         }
-        command = command
-            .add_action(ControllerAction::set_dpad(DPad::NEUTRAL, 500));
+        command = command.add_action(ControllerAction::set_dpad(DPad::NEUTRAL, 500));
 
         command
     }
 
     /// 描画モード選択コマンドを作成
     fn create_select_drawing_mode_command(&self) -> ControllerCommand {
-        let mut command = ControllerCommand::new("Select Drawing Mode")
-            .with_description("描画モードを選択");
+        let mut command =
+            ControllerCommand::new("Select Drawing Mode").with_description("描画モードを選択");
 
         let mode_button = self.config.drawing_mode.select_button();
-        
+
         // ペン選択前の待機時間を追加
-        command = command
-            .add_action(ControllerAction::wait(500))
-            .add_action(ControllerAction::press_button(mode_button, 200))
-            .add_action(ControllerAction::release_button(mode_button, 1000));
+        command = command.add_action(ControllerAction::wait(500));
+
+        // Lボタンの場合は最低2回押す（ピクセルペンを確実に選択）
+        if mode_button == Button::L {
+            // ピクセルペンに切り替えるために2回押す
+            for i in 0..2 {
+                command = command
+                    .add_action(ControllerAction::press_button(Button::L, 200))
+                    .add_action(ControllerAction::release_button(Button::L, 300));
+                if i < 1 {
+                    command = command.add_action(ControllerAction::wait(500));
+                }
+            }
+        } else {
+            command = command
+                .add_action(ControllerAction::press_button(mode_button, 200))
+                .add_action(ControllerAction::release_button(mode_button, 300));
+        }
+
+        command = command.add_action(ControllerAction::wait(1000));
 
         command
     }
@@ -86,24 +105,22 @@ impl ArtworkToCommandConverter {
         let coordinates: Vec<Coordinates> = match self.strategy {
             DrawingStrategy::RasterScan => {
                 // 左から右、上から下
-                let mut coords: Vec<Coordinates> = drawable_dots.into_iter()
-                    .map(|(coord, _)| *coord)
-                    .collect();
+                let mut coords: Vec<Coordinates> =
+                    drawable_dots.into_iter().map(|(coord, _)| *coord).collect();
                 coords.sort_by_key(|c| (c.y, c.x));
                 coords
             }
             DrawingStrategy::ZigZag => {
                 // ジグザグパターン
-                let mut coords: Vec<Coordinates> = drawable_dots.into_iter()
-                    .map(|(coord, _)| *coord)
-                    .collect();
+                let mut coords: Vec<Coordinates> =
+                    drawable_dots.into_iter().map(|(coord, _)| *coord).collect();
                 coords.sort_by_key(|c| (c.y, c.x));
-                
+
                 // 偶数行は逆順にする
                 let mut result = Vec::new();
                 let mut current_y = 0;
                 let mut row = Vec::new();
-                
+
                 for coord in coords {
                     if coord.y != current_y {
                         if current_y % 2 == 1 {
@@ -115,7 +132,7 @@ impl ArtworkToCommandConverter {
                     }
                     row.push(coord);
                 }
-                
+
                 if current_y % 2 == 1 {
                     row.reverse();
                 }
@@ -128,9 +145,8 @@ impl ArtworkToCommandConverter {
             }
             DrawingStrategy::Spiral => {
                 // スパイラルパターン（未実装、ラスタースキャンにフォールバック）
-                let mut coords: Vec<Coordinates> = drawable_dots.into_iter()
-                    .map(|(coord, _)| *coord)
-                    .collect();
+                let mut coords: Vec<Coordinates> =
+                    drawable_dots.into_iter().map(|(coord, _)| *coord).collect();
                 coords.sort_by_key(|c| (c.y, c.x));
                 coords
             }
@@ -142,18 +158,20 @@ impl ArtworkToCommandConverter {
     }
 
     /// 最近傍探索でパスを生成
-    fn nearest_neighbor_path(&self, drawable_dots: Vec<(&Coordinates, &crate::domain::artwork::entities::Dot)>) -> Vec<Coordinates> {
+    fn nearest_neighbor_path(
+        &self,
+        drawable_dots: Vec<(&Coordinates, &crate::domain::artwork::entities::Dot)>,
+    ) -> Vec<Coordinates> {
         if drawable_dots.is_empty() {
             return Vec::new();
         }
 
-        let mut remaining: Vec<_> = drawable_dots.into_iter()
-            .map(|(coord, _)| *coord)
-            .collect();
+        let mut remaining: Vec<_> = drawable_dots.into_iter().map(|(coord, _)| *coord).collect();
         let mut path = Vec::new();
-        
+
         // 最初の点（左上）
-        let start_idx = remaining.iter()
+        let start_idx = remaining
+            .iter()
             .position(|c| c.x == remaining.iter().map(|c| c.x).min().unwrap_or(0))
             .unwrap_or(0);
         let mut current = remaining.remove(start_idx);
@@ -161,12 +179,13 @@ impl ArtworkToCommandConverter {
 
         // 最近傍を探しながらパスを構築
         while !remaining.is_empty() {
-            let nearest_idx = remaining.iter()
+            let nearest_idx = remaining
+                .iter()
                 .enumerate()
                 .min_by_key(|(_, coord)| current.manhattan_distance_to(coord))
                 .map(|(idx, _)| idx)
                 .unwrap_or(0);
-            
+
             current = remaining.remove(nearest_idx);
             path.push(current);
         }
@@ -178,10 +197,10 @@ impl ArtworkToCommandConverter {
     fn create_drawing_commands(&self, path: &DrawingPath) -> Vec<ControllerCommand> {
         let mut commands = Vec::new();
         let mut current_pos = Coordinates::new(0, 0); // 開始位置
-        
+
         // バッチサイズ（1コマンドあたりのドット数）
         const BATCH_SIZE: usize = 100;
-        
+
         for (batch_idx, chunk) in path.coordinates.chunks(BATCH_SIZE).enumerate() {
             let mut command = ControllerCommand::new(format!("Draw Batch {}", batch_idx + 1))
                 .with_description(format!("{}個のドットを描画", chunk.len()));
@@ -195,7 +214,10 @@ impl ArtworkToCommandConverter {
 
                 // ドットを描画
                 command = command
-                    .add_action(ControllerAction::press_button(Button::A, self.config.dot_draw_delay_ms))
+                    .add_action(ControllerAction::press_button(
+                        Button::A,
+                        self.config.dot_draw_delay_ms,
+                    ))
                     .add_action(ControllerAction::release_button(Button::A, 50));
 
                 current_pos = *target;

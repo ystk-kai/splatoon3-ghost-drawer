@@ -2,7 +2,7 @@ use crate::domain::controller::{ControllerError, HidDeviceRepository, HidReport}
 use async_trait::async_trait;
 use std::path::Path;
 use tokio::fs::OpenOptions;
-use tokio::io::AsyncWriteExt;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tracing::{debug, info};
 
 pub struct LinuxHidDeviceRepository {
@@ -31,7 +31,11 @@ impl LinuxHidDeviceRepository {
 
 #[async_trait]
 impl HidDeviceRepository for LinuxHidDeviceRepository {
-    async fn write_report(&self, device_path: &str, report: &HidReport) -> Result<(), ControllerError> {
+    async fn write_report(
+        &self,
+        device_path: &str,
+        report: &HidReport,
+    ) -> Result<(), ControllerError> {
         let path = if device_path.is_empty() {
             &self.default_device_path
         } else {
@@ -42,7 +46,7 @@ impl HidDeviceRepository for LinuxHidDeviceRepository {
 
         // HIDレポートをバイト配列に変換
         let report_bytes = report.to_bytes();
-        
+
         // デバイスファイルを開く
         let mut file = OpenOptions::new()
             .write(true)
@@ -59,9 +63,9 @@ impl HidDeviceRepository for LinuxHidDeviceRepository {
             })?;
 
         // レポートを書き込む
-        file.write_all(&report_bytes)
-            .await
-            .map_err(|e| ControllerError::HidWriteFailed(format!("Failed to write report: {}", e)))?;
+        file.write_all(&report_bytes).await.map_err(|e| {
+            ControllerError::HidWriteFailed(format!("Failed to write report: {}", e))
+        })?;
 
         // 確実にフラッシュする
         file.flush()
@@ -98,7 +102,7 @@ impl HidDeviceRepository for LinuxHidDeviceRepository {
 
         // 8バイトのバッファを準備
         let mut buffer = vec![0u8; 8];
-        
+
         // レポートを読み込む
         use tokio::io::AsyncReadExt;
         file.read_exact(&mut buffer)
@@ -106,8 +110,7 @@ impl HidDeviceRepository for LinuxHidDeviceRepository {
             .map_err(|e| ControllerError::HidReadFailed(format!("Failed to read report: {}", e)))?;
 
         // バイト配列からHidReportに変換
-        HidReport::from_bytes(&buffer)
-            .map_err(|_e| ControllerError::InvalidHidReport)
+        HidReport::from_bytes(&buffer).map_err(|_e| ControllerError::InvalidHidReport)
     }
 
     async fn open_device(&self, device_path: &str) -> Result<(), ControllerError> {
@@ -132,7 +135,10 @@ impl HidDeviceRepository for LinuxHidDeviceRepository {
                 if e.kind() == std::io::ErrorKind::PermissionDenied {
                     Err(ControllerError::PermissionDenied)
                 } else {
-                    Err(ControllerError::DeviceInitFailed(format!("Cannot open {}: {}", path, e)))
+                    Err(ControllerError::DeviceInitFailed(format!(
+                        "Cannot open {}: {}",
+                        path, e
+                    )))
                 }
             }
         }
@@ -146,18 +152,19 @@ impl HidDeviceRepository for LinuxHidDeviceRepository {
 
     async fn list_devices(&self) -> Result<Vec<String>, ControllerError> {
         let mut devices = Vec::new();
-        
+
         // /dev/hidg* パターンでデバイスを探す
         let dev_path = Path::new("/dev");
-        
+
         let mut entries = tokio::fs::read_dir(dev_path)
             .await
             .map_err(|e| ControllerError::IoError(format!("Failed to read /dev: {}", e)))?;
 
-        while let Some(entry) = entries.next_entry()
+        while let Some(entry) = entries
+            .next_entry()
             .await
-            .map_err(|e| ControllerError::IoError(format!("Failed to read entry: {}", e)))? {
-            
+            .map_err(|e| ControllerError::IoError(format!("Failed to read entry: {}", e)))?
+        {
             if let Ok(name) = entry.file_name().into_string() {
                 if name.starts_with("hidg") {
                     devices.push(format!("/dev/{}", name));
@@ -167,5 +174,140 @@ impl HidDeviceRepository for LinuxHidDeviceRepository {
 
         info!("Found HID devices: {:?}", devices);
         Ok(devices)
+    }
+
+    async fn write_pro_controller_report(
+        &self,
+        device_path: &str,
+        report: &[u8; 64],
+    ) -> Result<(), ControllerError> {
+        let path = if device_path.is_empty() {
+            &self.default_device_path
+        } else {
+            device_path
+        };
+
+        debug!("Writing Pro Controller report to {}", path);
+
+        // デバイスファイルを開く
+        let mut file = OpenOptions::new()
+            .write(true)
+            .open(path)
+            .await
+            .map_err(|e| {
+                if e.kind() == std::io::ErrorKind::PermissionDenied {
+                    ControllerError::PermissionDenied
+                } else if e.kind() == std::io::ErrorKind::NotFound {
+                    ControllerError::DevicePathNotAvailable(path.to_string())
+                } else {
+                    ControllerError::HidWriteFailed(format!("Failed to open {}: {}", path, e))
+                }
+            })?;
+
+        // レポートを書き込む
+        file.write_all(report).await.map_err(|e| {
+            ControllerError::HidWriteFailed(format!("Failed to write report: {}", e))
+        })?;
+
+        // 確実にフラッシュする
+        file.flush()
+            .await
+            .map_err(|e| ControllerError::HidWriteFailed(format!("Failed to flush: {}", e)))?;
+
+        debug!("Pro Controller report written successfully");
+        Ok(())
+    }
+
+    async fn read_usb_command(&self, device_path: &str) -> Result<Vec<u8>, ControllerError> {
+        let path = if device_path.is_empty() {
+            &self.default_device_path
+        } else {
+            device_path
+        };
+
+        debug!("Reading USB command from {}", path);
+
+        // デバイスファイルを開く
+        let mut file = OpenOptions::new()
+            .read(true)
+            .open(path)
+            .await
+            .map_err(|e| {
+                if e.kind() == std::io::ErrorKind::PermissionDenied {
+                    ControllerError::PermissionDenied
+                } else if e.kind() == std::io::ErrorKind::NotFound {
+                    ControllerError::DevicePathNotAvailable(path.to_string())
+                } else {
+                    ControllerError::HidReadFailed(format!("Failed to open {}: {}", path, e))
+                }
+            })?;
+
+        // 64バイトのバッファを準備
+        let mut buffer = vec![0u8; 64];
+
+        // コマンドを読み込む
+        match file.read(&mut buffer).await {
+            Ok(n) => {
+                buffer.truncate(n);
+                debug!("Read {} bytes from USB", n);
+                Ok(buffer)
+            }
+            Err(e) => {
+                if e.kind() == std::io::ErrorKind::WouldBlock {
+                    // データがない場合は空のベクタを返す
+                    Ok(Vec::new())
+                } else {
+                    Err(ControllerError::HidReadFailed(format!(
+                        "Failed to read command: {}",
+                        e
+                    )))
+                }
+            }
+        }
+    }
+
+    async fn write_usb_response(
+        &self,
+        device_path: &str,
+        response: &[u8],
+    ) -> Result<(), ControllerError> {
+        let path = if device_path.is_empty() {
+            &self.default_device_path
+        } else {
+            device_path
+        };
+
+        debug!(
+            "Writing USB response to {} ({} bytes)",
+            path,
+            response.len()
+        );
+
+        // デバイスファイルを開く
+        let mut file = OpenOptions::new()
+            .write(true)
+            .open(path)
+            .await
+            .map_err(|e| {
+                if e.kind() == std::io::ErrorKind::PermissionDenied {
+                    ControllerError::PermissionDenied
+                } else if e.kind() == std::io::ErrorKind::NotFound {
+                    ControllerError::DevicePathNotAvailable(path.to_string())
+                } else {
+                    ControllerError::HidWriteFailed(format!("Failed to open {}: {}", path, e))
+                }
+            })?;
+
+        // レスポンスを書き込む
+        file.write_all(response).await.map_err(|e| {
+            ControllerError::HidWriteFailed(format!("Failed to write response: {}", e))
+        })?;
+
+        file.flush()
+            .await
+            .map_err(|e| ControllerError::HidWriteFailed(format!("Failed to flush: {}", e)))?;
+
+        debug!("USB response written successfully");
+        Ok(())
     }
 }

@@ -70,7 +70,7 @@ impl SetupSystemUseCase {
         // Create and enable web UI service
         info!("Creating web UI systemd service...");
         self.systemd_manager.create_web_service()?;
-        
+
         info!("Enabling web UI systemd service...");
         self.systemd_manager.enable_web_service()?;
         info!("Web UI systemd service enabled.");

@@ -1,6 +1,6 @@
 use super::log_streamer::stream_logs;
 use super::models::{HardwareDetails, HardwareStatus, SystemInfo};
-use axum::{extract::ws::WebSocketUpgrade, response::Response, Json};
+use axum::{Json, extract::ws::WebSocketUpgrade, response::Response};
 use std::path::Path;
 
 /// Get system information
@@ -49,22 +49,39 @@ fn get_system_uptime() -> u64 {
 }
 
 async fn check_nintendo_switch_connection() -> bool {
+    use tracing::debug;
+
     // Check if HID device is available and if gadget is active
     if !check_hid_device_availability() {
+        debug!("HID device not available");
         return false;
     }
 
     // Check USB Gadget state - UDC should contain the USB controller name when connected
     let gadget_udc_path = "/sys/kernel/config/usb_gadget/g1/UDC";
-    if let Ok(udc_content) = std::fs::read_to_string(gadget_udc_path) {
-        let udc_trimmed = udc_content.trim();
-        if !udc_trimmed.is_empty() {
-            // Additional check: verify the HID device can be opened for writing
-            if let Ok(_) = std::fs::OpenOptions::new()
-                .write(true)
-                .open("/dev/hidg0") {
-                return true;
+    match std::fs::read_to_string(gadget_udc_path) {
+        Ok(udc_content) => {
+            let udc_trimmed = udc_content.trim();
+            debug!("UDC content: '{}'", udc_trimmed);
+
+            // UDCが空でない場合は接続中
+            if !udc_trimmed.is_empty() {
+                // 追加チェック: HIDデバイスの状態を確認
+                if let Ok(file) = std::fs::OpenOptions::new().write(true).open("/dev/hidg0") {
+                    drop(file); // ファイルをすぐに閉じる
+
+                    // USB gadgetの状態を確認
+                    let state_path = "/sys/kernel/config/usb_gadget/g1/state";
+                    if let Ok(state) = std::fs::read_to_string(state_path) {
+                        debug!("USB gadget state: {}", state.trim());
+                    }
+
+                    return true;
+                }
             }
+        }
+        Err(e) => {
+            debug!("Failed to read UDC file: {}", e);
         }
     }
 

@@ -8,7 +8,7 @@ use tracing::{error, info};
 use splatoon3_ghost_drawer::application::use_cases::{
     CleanupSystemUseCase, ConfigureUsbGadgetUseCase, RunApplicationUseCase, SetupSystemUseCase,
 };
-use splatoon3_ghost_drawer::debug::{init_logging, DebugConfig};
+use splatoon3_ghost_drawer::debug::{DebugConfig, init_logging};
 use splatoon3_ghost_drawer::infrastructure::hardware::linux_usb_gadget_manager::LinuxUsbGadgetManager;
 use splatoon3_ghost_drawer::infrastructure::setup::{
     LinuxBoardDetector, LinuxBootConfigurator, LinuxSystemdManager,
@@ -33,12 +33,9 @@ async fn main() -> anyhow::Result<()> {
     match cli.command {
         Commands::Setup { force } => {
             info!("Executing setup command...");
-            let use_case = SetupSystemUseCase::new(
-                board_detector,
-                boot_configurator,
-                systemd_manager,
-            );
-            
+            let use_case =
+                SetupSystemUseCase::new(board_detector, boot_configurator, systemd_manager);
+
             match use_case.execute(force) {
                 Ok(_) => {
                     println!("✅ System setup completed successfully!");
@@ -55,7 +52,7 @@ async fn main() -> anyhow::Result<()> {
         Commands::Run { port, host } => {
             info!("Starting application...");
             let use_case = RunApplicationUseCase::new();
-            
+
             match use_case.execute(host, port).await {
                 Ok(_) => {
                     info!("Application terminated normally");
@@ -69,12 +66,9 @@ async fn main() -> anyhow::Result<()> {
         }
         Commands::Cleanup => {
             info!("Executing cleanup command...");
-            let use_case = CleanupSystemUseCase::new(
-                board_detector,
-                boot_configurator,
-                systemd_manager,
-            );
-            
+            let use_case =
+                CleanupSystemUseCase::new(board_detector, boot_configurator, systemd_manager);
+
             match use_case.execute() {
                 Ok(_) => {
                     println!("✅ System cleanup completed successfully!");
@@ -91,7 +85,7 @@ async fn main() -> anyhow::Result<()> {
         Commands::InternalConfigureGadget => {
             info!("Configuring USB gadget...");
             let use_case = ConfigureUsbGadgetUseCase::new(usb_gadget_manager);
-            
+
             match use_case.execute() {
                 Ok(_) => {
                     info!("USB gadget configured successfully");

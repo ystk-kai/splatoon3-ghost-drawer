@@ -380,7 +380,7 @@ class GhostDrawerApp {
         this.checkConnection();
         this.connectionCheckInterval = setInterval(() => {
             this.checkConnection();
-        }, 5000); // 5秒ごとにチェック
+        }, 1000); // 1秒ごとにチェック
     }
 
     async checkConnection() {

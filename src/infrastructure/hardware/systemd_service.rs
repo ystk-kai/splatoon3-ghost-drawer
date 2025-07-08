@@ -1,4 +1,6 @@
-use crate::domain::hardware::{HardwareError, SystemdService, SystemdServiceRepository, SystemdServiceState};
+use crate::domain::hardware::{
+    HardwareError, SystemdService, SystemdServiceRepository, SystemdServiceState,
+};
 use async_trait::async_trait;
 use tokio::fs;
 use tokio::process::Command;
@@ -23,7 +25,9 @@ impl SystemdServiceManager {
             .args(args)
             .output()
             .await
-            .map_err(|e| HardwareError::SystemCommandFailed(format!("Failed to run systemctl: {}", e)))?;
+            .map_err(|e| {
+                HardwareError::SystemCommandFailed(format!("Failed to run systemctl: {}", e))
+            })?;
 
         Ok(output)
     }
@@ -54,13 +58,16 @@ WantedBy=multi-user.target
 impl SystemdServiceRepository for SystemdServiceManager {
     async fn create_service(&self, service: &SystemdService) -> Result<(), HardwareError> {
         let content = Self::create_service_content(service);
-        
+
         // Write service file
         fs::write(&service.unit_file_path, &content)
             .await
-            .map_err(|e| HardwareError::FileOperationFailed(
-                format!("Failed to write service file {}: {}", service.unit_file_path, e)
-            ))?;
+            .map_err(|e| {
+                HardwareError::FileOperationFailed(format!(
+                    "Failed to write service file {}: {}",
+                    service.unit_file_path, e
+                ))
+            })?;
 
         // Create the setup script
         let setup_script = r#"#!/bin/bash
@@ -126,22 +133,25 @@ fi
         let setup_script_path = "/usr/local/bin/setup-nintendo-controller.sh";
         fs::write(setup_script_path, setup_script)
             .await
-            .map_err(|e| HardwareError::FileOperationFailed(
-                format!("Failed to write setup script: {}", e)
-            ))?;
+            .map_err(|e| {
+                HardwareError::FileOperationFailed(format!("Failed to write setup script: {}", e))
+            })?;
 
         // Make script executable
         let output = Command::new("sudo")
             .args(&["chmod", "+x", setup_script_path])
             .output()
             .await
-            .map_err(|e| HardwareError::SystemCommandFailed(
-                format!("Failed to make script executable: {}", e)
-            ))?;
+            .map_err(|e| {
+                HardwareError::SystemCommandFailed(format!(
+                    "Failed to make script executable: {}",
+                    e
+                ))
+            })?;
 
         if !output.status.success() {
             return Err(HardwareError::SystemdServiceFailed(
-                "Failed to make setup script executable".to_string()
+                "Failed to make setup script executable".to_string(),
             ));
         }
 
@@ -178,18 +188,21 @@ echo "USB Gadget removed"
         let remove_script_path = "/usr/local/bin/remove-nintendo-controller.sh";
         fs::write(remove_script_path, remove_script)
             .await
-            .map_err(|e| HardwareError::FileOperationFailed(
-                format!("Failed to write removal script: {}", e)
-            ))?;
+            .map_err(|e| {
+                HardwareError::FileOperationFailed(format!("Failed to write removal script: {}", e))
+            })?;
 
         // Make removal script executable
         Command::new("sudo")
             .args(&["chmod", "+x", remove_script_path])
             .output()
             .await
-            .map_err(|e| HardwareError::SystemCommandFailed(
-                format!("Failed to make removal script executable: {}", e)
-            ))?;
+            .map_err(|e| {
+                HardwareError::SystemCommandFailed(format!(
+                    "Failed to make removal script executable: {}",
+                    e
+                ))
+            })?;
 
         info!("Systemd service created: {}", service.name);
         Ok(())
@@ -200,9 +213,10 @@ echo "USB Gadget removed"
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(HardwareError::SystemdServiceFailed(
-                format!("Failed to enable service: {}", stderr)
-            ));
+            return Err(HardwareError::SystemdServiceFailed(format!(
+                "Failed to enable service: {}",
+                stderr
+            )));
         }
 
         service.state = SystemdServiceState::Enabled;
@@ -215,9 +229,10 @@ echo "USB Gadget removed"
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(HardwareError::SystemdServiceFailed(
-                format!("Failed to start service: {}", stderr)
-            ));
+            return Err(HardwareError::SystemdServiceFailed(format!(
+                "Failed to start service: {}",
+                stderr
+            )));
         }
 
         service.state = SystemdServiceState::Running;
@@ -230,9 +245,10 @@ echo "USB Gadget removed"
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(HardwareError::SystemdServiceFailed(
-                format!("Failed to stop service: {}", stderr)
-            ));
+            return Err(HardwareError::SystemdServiceFailed(format!(
+                "Failed to stop service: {}",
+                stderr
+            )));
         }
 
         service.state = SystemdServiceState::Installed;
@@ -271,9 +287,10 @@ echo "USB Gadget removed"
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(HardwareError::SystemdServiceFailed(
-                format!("Failed to reload systemd daemon: {}", stderr)
-            ));
+            return Err(HardwareError::SystemdServiceFailed(format!(
+                "Failed to reload systemd daemon: {}",
+                stderr
+            )));
         }
 
         info!("Systemd daemon reloaded");

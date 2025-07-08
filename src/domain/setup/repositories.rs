@@ -5,19 +5,19 @@ use thiserror::Error;
 pub enum SetupError {
     #[error("Failed to detect board model: {0}")]
     BoardDetectionFailed(String),
-    
+
     #[error("Failed to configure boot: {0}")]
     BootConfigurationFailed(String),
-    
+
     #[error("Failed to manage systemd service: {0}")]
     SystemdServiceFailed(String),
-    
+
     #[error("Permission denied: {0}")]
     PermissionDenied(String),
-    
+
     #[error("File system error: {0}")]
     FileSystemError(#[from] std::io::Error),
-    
+
     #[error("Unknown error: {0}")]
     Unknown(String),
 }

@@ -1,8 +1,8 @@
 use axum::{
+    Json,
     extract::{Multipart, Path, State},
     http::StatusCode,
     response::IntoResponse,
-    Json,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -11,9 +11,9 @@ use tokio::sync::RwLock;
 use tracing::{info, warn};
 
 // Import domain entities
+use super::error_response::ErrorResponse;
 use crate::domain::artwork::entities::{Artwork, ArtworkMetadata, Canvas, Dot};
 use crate::domain::shared::value_objects::{Color, Coordinates};
-use super::error_response::ErrorResponse;
 
 #[derive(Debug, Clone)]
 pub struct ArtworkState {
@@ -92,7 +92,7 @@ pub async fn list_artworks(State(state): State<Arc<ArtworkState>>) -> Json<Vec<A
             updated_at: artwork.updated_at.epoch_millis as i64,
         })
         .collect();
-    
+
     Json(summaries)
 }
 
@@ -108,76 +108,89 @@ pub async fn create_artwork(
             warn!("JSON parsing error: {:?}", e);
             return Err(ErrorResponse::new(
                 StatusCode::UNPROCESSABLE_ENTITY,
-                format!("Invalid JSON: {}", e)
+                format!("Invalid JSON: {}", e),
             ));
         }
     };
-    
+
     info!("Creating artwork: {}", request.name);
     info!("Dimensions: {}x{}", request.width, request.height);
     info!("Number of dots: {}", request.dots.len());
-    
+
     // Validate dimensions
     if request.width == 0 || request.height == 0 {
         warn!("Invalid dimensions: {}x{}", request.width, request.height);
         return Err(ErrorResponse::new(
             StatusCode::UNPROCESSABLE_ENTITY,
-            "Width and height must be greater than 0"
+            "Width and height must be greater than 0",
         ));
     }
-    
+
     if request.width > 1000 || request.height > 1000 {
         warn!("Dimensions too large: {}x{}", request.width, request.height);
         return Err(ErrorResponse::new(
             StatusCode::UNPROCESSABLE_ENTITY,
-            "Width and height must not exceed 1000 pixels"
+            "Width and height must not exceed 1000 pixels",
         ));
     }
-    
+
     // Validate dots
     if request.dots.is_empty() {
         warn!("No dots provided");
         return Err(ErrorResponse::new(
             StatusCode::UNPROCESSABLE_ENTITY,
-            "At least one dot is required"
+            "At least one dot is required",
         ));
     }
-    
+
     // Create canvas from dots
     let mut canvas = Canvas::new(request.width, request.height);
-    
+
     // Add dots to canvas
     for (index, dot_data) in request.dots.iter().enumerate() {
         // Validate dot coordinates
         if dot_data.x >= request.width || dot_data.y >= request.height {
-            warn!("Dot {} has invalid coordinates: ({}, {})", index, dot_data.x, dot_data.y);
+            warn!(
+                "Dot {} has invalid coordinates: ({}, {})",
+                index, dot_data.x, dot_data.y
+            );
             return Err(ErrorResponse::new(
                 StatusCode::UNPROCESSABLE_ENTITY,
-                format!("Dot at index {} has coordinates outside canvas bounds", index)
+                format!(
+                    "Dot at index {} has coordinates outside canvas bounds",
+                    index
+                ),
             ));
         }
-        
+
         let color = parse_color(&dot_data.color).unwrap_or(Color::new(0, 0, 0, 255));
         let coordinates = Coordinates::new(dot_data.x, dot_data.y);
         let dot = Dot::new(color, 255);
         if let Err(e) = canvas.set_dot(coordinates, dot) {
-            warn!("Failed to set dot at ({}, {}): {:?}", dot_data.x, dot_data.y, e);
+            warn!(
+                "Failed to set dot at ({}, {}): {:?}",
+                dot_data.x, dot_data.y, e
+            );
         }
     }
-    
+
     // Create metadata
-    let metadata = ArtworkMetadata::new(request.name.clone())
-        .with_description("Created via API".to_string());
-    
+    let metadata =
+        ArtworkMetadata::new(request.name.clone()).with_description("Created via API".to_string());
+
     // Create artwork
     let artwork = Artwork::new(metadata, "api".to_string(), canvas);
     let artwork_id = artwork.id.as_str().to_string();
-    
+
     // Store artwork
-    state.artworks.write().await.insert(artwork_id.clone(), artwork);
-    
+    state
+        .artworks
+        .write()
+        .await
+        .insert(artwork_id.clone(), artwork);
+
     info!("Artwork created with ID: {}", artwork_id);
-    
+
     Ok(Json(ArtworkResponse {
         id: artwork_id,
         message: format!("Artwork '{}' created successfully", request.name),
@@ -191,7 +204,7 @@ pub async fn get_artwork(
     Path(id): Path<String>,
 ) -> Result<Json<ArtworkSummary>, StatusCode> {
     let artworks = state.artworks.read().await;
-    
+
     match artworks.get(&id) {
         Some(artwork) => Ok(Json(ArtworkSummary {
             id: artwork.id.as_str().to_string(),
@@ -214,7 +227,7 @@ pub async fn delete_artwork(
     Path(id): Path<String>,
 ) -> Result<Json<ApiResponse>, StatusCode> {
     let mut artworks = state.artworks.write().await;
-    
+
     match artworks.remove(&id) {
         Some(_) => {
             info!("Artwork {} deleted", id);
@@ -234,20 +247,20 @@ pub async fn paint_artwork(
     Json(request): Json<PaintRequest>,
 ) -> Result<Json<ApiResponse>, StatusCode> {
     let artworks = state.artworks.read().await;
-    
+
     match artworks.get(&id) {
         Some(artwork) => {
             let speed = request.speed.unwrap_or(2.0);
             let preview = request.preview.unwrap_or(false);
-            
+
             info!(
                 "Starting painting for artwork {} (speed: {}, preview: {})",
                 id, speed, preview
             );
-            
+
             // TODO: Implement actual painting logic
             let estimated_time = artwork.estimated_painting_time(speed as f64);
-            
+
             Ok(Json(ApiResponse {
                 success: true,
                 message: format!(
@@ -267,11 +280,11 @@ pub async fn upload_artwork(
 ) -> Result<Json<ArtworkResponse>, StatusCode> {
     let mut name = String::new();
     let mut image_data = Vec::new();
-    
+
     // Process multipart form
     while let Some(field) = multipart.next_field().await.unwrap() {
         let field_name = field.name().unwrap_or("").to_string();
-        
+
         match field_name.as_str() {
             "name" => {
                 name = field.text().await.unwrap_or_default();
@@ -282,27 +295,31 @@ pub async fn upload_artwork(
             _ => {}
         }
     }
-    
+
     if name.is_empty() || image_data.is_empty() {
         return Err(StatusCode::BAD_REQUEST);
     }
-    
+
     info!("Uploading artwork: {} ({} bytes)", name, image_data.len());
-    
+
     // Create simple canvas (TODO: implement actual image processing)
     let canvas = Canvas::new(320, 180);
-    
+
     // Create metadata
-    let metadata = ArtworkMetadata::new(name.clone())
-        .with_description("Uploaded image".to_string());
-    
+    let metadata =
+        ArtworkMetadata::new(name.clone()).with_description("Uploaded image".to_string());
+
     // Create artwork
     let artwork = Artwork::new(metadata, "png".to_string(), canvas);
     let artwork_id = artwork.id.as_str().to_string();
-    
+
     // Store artwork
-    state.artworks.write().await.insert(artwork_id.clone(), artwork);
-    
+    state
+        .artworks
+        .write()
+        .await
+        .insert(artwork_id.clone(), artwork);
+
     Ok(Json(ArtworkResponse {
         id: artwork_id,
         message: format!("Image '{}' uploaded successfully", name),
