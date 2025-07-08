@@ -38,9 +38,16 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 source ~/.cargo/env
 
 # このプロジェクトをインストール
-git clone https://github.com/yourusername/splatoon3-ghost-drawer.git
+git clone https://github.com/ystk-kai/splatoon3-ghost-drawer.git
 cd splatoon3-ghost-drawer
 cargo install --path .
+
+# sudoで実行可能にするための設定
+# cargo installでビルドされたバイナリをシステムパスにコピー
+sudo cp ~/.cargo/bin/splatoon3-ghost-drawer /usr/local/bin/
+
+# 実行権限を確認
+sudo chmod +x /usr/local/bin/splatoon3-ghost-drawer
 ```
 
 ### 2. システムセットアップ（初回のみ）
@@ -49,6 +56,18 @@ cargo install --path .
 # USB Gadgetモードの設定とsystemdサービスの登録
 sudo splatoon3-ghost-drawer setup
 ```
+
+> **注意**: setupコマンドは以下の設定を自動的に行います：
+> - USB Gadgetモードの有効化（ブート設定）
+> - `splatoon3-gadget.service`（USB Gadget設定サービス）の作成・有効化
+> - `splatoon3-ghost-drawer.service`（Web UIサービス）の作成・有効化
+> 
+> システム再起動後は、両方のサービスが自動的に起動します。
+
+> **注意**: `sudo`実行時のセキュリティ
+> - `/usr/local/bin/`にコピーされたバイナリは、sudoコマンドで実行してもPATH内に存在するため直接実行できます
+> - `~/.cargo/bin/`内のバイナリはsudo実行時にPATHに含まれないため、フルパスで指定する必要があります
+> - システムワイドでの利用には`/usr/local/bin/`へのコピーが推奨されます
 
 ### 3. アプリケーションの起動
 
@@ -62,6 +81,8 @@ splatoon3-ghost-drawer run --port 3000
 # ローカルホストのみで起動
 splatoon3-ghost-drawer run --host 127.0.0.1
 ```
+
+> **注意**: setupコマンドを実行して再起動後は、Web UIサービスが自動的に起動しているため、手動で`run`コマンドを実行する必要はありません。
 
 ### 4. Web UIにアクセス
 
@@ -108,9 +129,18 @@ cargo install --path .
 # → ~/.cargo/bin/splatoon3-ghost-drawer にインストールされます
 # → PATHが通っているため、どこからでも実行可能
 
+# sudoで実行可能にするための設定
+# cargo installでビルドされたバイナリをシステムパスにコピー
+sudo cp ~/.cargo/bin/splatoon3-ghost-drawer /usr/local/bin/
+# 実行権限を確認
+sudo chmod +x /usr/local/bin/splatoon3-ghost-drawer
+
 # または手動でビルドして実行
 cargo build --release
 # → ./target/release/splatoon3-ghost-drawer を直接実行
+# 手動ビルドの場合も同様にコピー可能
+sudo cp ./target/release/splatoon3-ghost-drawer /usr/local/bin/
+sudo chmod +x /usr/local/bin/splatoon3-ghost-drawer
 ```
 
 5. **初期セットアップと実行**
@@ -147,6 +177,12 @@ splatoon3-ghost-drawer run --host 127.0.0.1 --port 3000
 
 # すべてのインターフェースで特定のポートで起動
 splatoon3-ghost-drawer run --port 8888
+```
+
+##### `cleanup` - システムクリーンアップ
+```bash
+# setupで作成されたすべての設定を削除（要root権限）
+sudo splatoon3-ghost-drawer cleanup
 ```
 
 ##### ヘルプとバージョン
