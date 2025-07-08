@@ -62,6 +62,11 @@ impl SetupSystemUseCase {
             info!("Gadget systemd service enabled.");
         }
 
+        // Setup application files
+        info!("Setting up application files...");
+        self.systemd_manager.setup_application_files()?;
+        info!("Application files setup completed.");
+
         // Create and enable web UI service
         info!("Creating web UI systemd service...");
         self.systemd_manager.create_web_service()?;

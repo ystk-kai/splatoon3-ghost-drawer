@@ -52,6 +52,11 @@ impl CleanupSystemUseCase {
         info!("Cleaning up USB gadget configuration...");
         cleanup_usb_gadget()?;
 
+        // Cleanup application files
+        info!("Cleaning up application files...");
+        self.systemd_manager.cleanup_application_files()?;
+        info!("Application files cleaned up.");
+
         info!("System cleanup completed successfully!");
         info!("Please reboot the device for changes to take effect.");
 

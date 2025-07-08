@@ -39,6 +39,8 @@ pub trait SystemdServiceManager: Send + Sync {
     fn create_web_service(&self) -> Result<(), SetupError>;
     fn enable_web_service(&self) -> Result<(), SetupError>;
     fn disable_and_remove_services(&self) -> Result<(), SetupError>;
+    fn setup_application_files(&self) -> Result<(), SetupError>;
+    fn cleanup_application_files(&self) -> Result<(), SetupError>;
 }
 
 pub trait SystemSetupRepository: Send + Sync {

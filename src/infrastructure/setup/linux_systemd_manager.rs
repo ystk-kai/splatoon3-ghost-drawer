@@ -1,8 +1,9 @@
 use crate::domain::setup::repositories::{SetupError, SystemdServiceManager};
 use std::fs;
 use std::io::Write;
+use std::path::Path;
 use std::process::Command;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 const GADGET_SERVICE_NAME: &str = "splatoon3-gadget";
 const GADGET_SERVICE_FILE: &str = "/etc/systemd/system/splatoon3-gadget.service";
@@ -34,7 +35,8 @@ impl SystemdServiceManager for LinuxSystemdManager {
     fn create_gadget_service(&self) -> Result<(), SetupError> {
         info!("Creating systemd service file...");
 
-        let executable_path = Self::get_executable_path()?;
+        // Use the path where the binary will be installed
+        let executable_path = "/opt/splatoon3-ghost-drawer/splatoon3-ghost-drawer".to_string();
 
         let service_content = format!(
             r#"[Unit]
@@ -134,7 +136,8 @@ WantedBy=sysinit.target
     fn create_web_service(&self) -> Result<(), SetupError> {
         info!("Creating web UI systemd service file...");
 
-        let executable_path = Self::get_executable_path()?;
+        // Use the path where the binary will be installed
+        let executable_path = "/opt/splatoon3-ghost-drawer/splatoon3-ghost-drawer".to_string();
 
         let service_content = format!(
             r#"[Unit]
@@ -145,6 +148,7 @@ Requires=splatoon3-gadget.service
 
 [Service]
 Type=simple
+WorkingDirectory=/opt/splatoon3-ghost-drawer
 ExecStart={} run
 Restart=on-failure
 RestartSec=10
@@ -263,6 +267,117 @@ WantedBy=multi-user.target
         }
 
         info!("Removed all systemd services");
+
+        Ok(())
+    }
+
+    fn setup_application_files(&self) -> Result<(), SetupError> {
+        info!("Setting up application files...");
+
+        let app_dir = "/opt/splatoon3-ghost-drawer";
+        
+        // Create application directory
+        fs::create_dir_all(app_dir)
+            .map_err(|e| SetupError::FileSystemError(e))?;
+
+        // Get source directory (where the binary was executed from)
+        let exe_path = std::env::current_exe()
+            .map_err(|e| SetupError::SystemdServiceFailed(format!("Failed to get executable path: {}", e)))?;
+        
+        let src_dir = exe_path.parent()
+            .and_then(|p| p.parent())
+            .ok_or_else(|| SetupError::SystemdServiceFailed("Failed to determine source directory".to_string()))?;
+
+        // Look for web directory in common locations
+        let web_dirs = [
+            src_dir.join("web"),
+            Path::new("/home/ystk/projects/splatoon3-ghost-drawer/web").to_path_buf(),
+            Path::new("./web").to_path_buf(),
+        ];
+
+        let mut web_src_found = false;
+        for web_src in &web_dirs {
+            if web_src.exists() {
+                info!("Found web directory at: {:?}", web_src);
+                
+                // Copy web directory
+                let web_dest = Path::new(app_dir).join("web");
+                
+                // Remove existing web directory if it exists
+                if web_dest.exists() {
+                    fs::remove_dir_all(&web_dest)
+                        .map_err(|e| SetupError::FileSystemError(e))?;
+                }
+
+                // Copy directory recursively
+                let output = Command::new("cp")
+                    .args(["-r", &web_src.to_string_lossy(), &web_dest.to_string_lossy()])
+                    .output()
+                    .map_err(|e| SetupError::SystemdServiceFailed(format!("Failed to copy web directory: {}", e)))?;
+
+                if !output.status.success() {
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    return Err(SetupError::SystemdServiceFailed(format!(
+                        "Failed to copy web directory: {}",
+                        stderr
+                    )));
+                }
+
+                info!("Copied web directory to {}", web_dest.display());
+                web_src_found = true;
+                break;
+            }
+        }
+
+        if !web_src_found {
+            warn!("Web directory not found in any expected location. Web UI may not work properly.");
+        }
+
+        // Copy the binary itself to /opt for consistency
+        let binary_dest = Path::new(app_dir).join("splatoon3-ghost-drawer");
+        let binary_src = Self::get_executable_path()?;
+        
+        let output = Command::new("cp")
+            .args([&binary_src, binary_dest.to_str().unwrap()])
+            .output()
+            .map_err(|e| SetupError::SystemdServiceFailed(format!("Failed to copy binary: {}", e)))?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(SetupError::SystemdServiceFailed(format!(
+                "Failed to copy binary: {}",
+                stderr
+            )));
+        }
+
+        // Make binary executable
+        let output = Command::new("chmod")
+            .args(["+x", binary_dest.to_str().unwrap()])
+            .output()
+            .map_err(|e| SetupError::SystemdServiceFailed(format!("Failed to chmod binary: {}", e)))?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(SetupError::SystemdServiceFailed(format!(
+                "Failed to make binary executable: {}",
+                stderr
+            )));
+        }
+
+        info!("Application files setup completed");
+        Ok(())
+    }
+
+    fn cleanup_application_files(&self) -> Result<(), SetupError> {
+        info!("Cleaning up application files...");
+
+        let app_dir = "/opt/splatoon3-ghost-drawer";
+        
+        if Path::new(app_dir).exists() {
+            fs::remove_dir_all(app_dir)
+                .map_err(|e| SetupError::FileSystemError(e))?;
+            info!("Removed application directory: {}", app_dir);
+        }
 
         Ok(())
     }
