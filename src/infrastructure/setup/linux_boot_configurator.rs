@@ -159,4 +159,106 @@ impl BootConfigurator for LinuxBootConfigurator {
             BoardModel::Unknown(_) => Ok(false),
         }
     }
+
+    fn remove_boot_configuration(&self, board: &BoardModel) -> Result<(), SetupError> {
+        info!("Removing boot configuration for board: {:?}", board);
+
+        match board {
+            BoardModel::OrangePiZero2W => {
+                let env_file = "/boot/armbianEnv.txt";
+                if !Path::new(env_file).exists() {
+                    return Ok(());
+                }
+
+                let content = fs::read_to_string(env_file)?;
+                let mut lines: Vec<String> = content.lines().map(|s| s.to_string()).collect();
+                let mut modified = false;
+
+                if let Some(overlay) = board.otg_device_tree_overlay() {
+                    for line in &mut lines {
+                        if line.starts_with("overlays=") && line.contains(overlay) {
+                            // Remove the overlay from the line
+                            let overlays: Vec<&str> = line[9..]
+                                .split(' ')
+                                .filter(|s| !s.contains(overlay))
+                                .collect();
+                            
+                            if overlays.is_empty() {
+                                *line = String::new();
+                            } else {
+                                *line = format!("overlays={}", overlays.join(" "));
+                            }
+                            modified = true;
+                            break;
+                        }
+                    }
+                }
+
+                if modified {
+                    // Remove empty lines
+                    lines.retain(|line| !line.is_empty());
+                    
+                    let mut file = fs::OpenOptions::new()
+                        .write(true)
+                        .truncate(true)
+                        .open(env_file)?;
+                    
+                    for line in &lines {
+                        writeln!(file, "{}", line)?;
+                    }
+                    info!("Removed USB OTG configuration from {}", env_file);
+                }
+
+                Ok(())
+            }
+            BoardModel::RaspberryPiZero | BoardModel::RaspberryPiZero2W => {
+                let config_file = "/boot/config.txt";
+                if !Path::new(config_file).exists() {
+                    return Ok(());
+                }
+
+                let content = fs::read_to_string(config_file)?;
+                let lines: Vec<String> = content.lines().map(|s| s.to_string()).collect();
+                let mut new_lines = Vec::new();
+                let mut skip_next = false;
+
+                for line in lines {
+                    if skip_next && line.trim().is_empty() {
+                        skip_next = false;
+                        continue;
+                    }
+                    skip_next = false;
+
+                    if line.trim() == "dtoverlay=dwc2" {
+                        skip_next = true;
+                        continue;
+                    }
+                    if line.contains("Enable USB OTG mode for gadget") {
+                        continue;
+                    }
+                    new_lines.push(line);
+                }
+
+                fs::write(config_file, new_lines.join("\n"))?;
+                info!("Removed dtoverlay=dwc2 from {}", config_file);
+
+                // Remove modules-load=dwc2 from cmdline.txt
+                let cmdline_file = "/boot/cmdline.txt";
+                if Path::new(cmdline_file).exists() {
+                    let cmdline = fs::read_to_string(cmdline_file)?;
+                    if cmdline.contains("modules-load=dwc2") {
+                        let new_cmdline = cmdline.replace(" modules-load=dwc2", "").replace("modules-load=dwc2 ", "");
+                        fs::write(cmdline_file, new_cmdline)?;
+                        info!("Removed modules-load=dwc2 from {}", cmdline_file);
+                    }
+                }
+
+                Ok(())
+            }
+            BoardModel::Unknown(name) => {
+                info!("No boot configuration to remove for unknown board: {}", name);
+                Ok(())
+            }
+        }
+    }
 }

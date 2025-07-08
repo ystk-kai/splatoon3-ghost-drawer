@@ -30,6 +30,8 @@ pub enum Commands {
         #[arg(short = 'H', long, default_value = "0.0.0.0")]
         host: String,
     },
+    /// Remove all configurations created by setup (requires root privileges)
+    Cleanup,
     /// [Internal] Configure USB gadget via configfs (called by systemd)
     #[command(name = "_internal_configure_gadget", hide = true)]
     InternalConfigureGadget,

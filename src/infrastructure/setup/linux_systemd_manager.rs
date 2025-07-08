@@ -4,8 +4,10 @@ use std::io::Write;
 use std::process::Command;
 use tracing::{debug, info};
 
-const SERVICE_NAME: &str = "splatoon3-gadget";
-const SERVICE_FILE: &str = "/etc/systemd/system/splatoon3-gadget.service";
+const GADGET_SERVICE_NAME: &str = "splatoon3-gadget";
+const GADGET_SERVICE_FILE: &str = "/etc/systemd/system/splatoon3-gadget.service";
+const WEB_SERVICE_NAME: &str = "splatoon3-ghost-drawer";
+const WEB_SERVICE_FILE: &str = "/etc/systemd/system/splatoon3-ghost-drawer.service";
 
 pub struct LinuxSystemdManager;
 
@@ -59,7 +61,7 @@ WantedBy=multi-user.target
             .write(true)
             .create(true)
             .truncate(true)
-            .open(SERVICE_FILE)
+            .open(GADGET_SERVICE_FILE)
             .map_err(|e| {
                 SetupError::SystemdServiceFailed(format!("Failed to create service file: {}", e))
             })?;
@@ -67,7 +69,7 @@ WantedBy=multi-user.target
         file.write_all(service_content.as_bytes())
             .map_err(|e| SetupError::SystemdServiceFailed(format!("Failed to write service file: {}", e)))?;
 
-        info!("Created systemd service file at {}", SERVICE_FILE);
+        info!("Created systemd service file at {}", GADGET_SERVICE_FILE);
 
         // Reload systemd daemon
         let output = Command::new("systemctl")
@@ -94,7 +96,7 @@ WantedBy=multi-user.target
         info!("Enabling systemd service...");
 
         let output = Command::new("systemctl")
-            .args(["enable", &format!("{}.service", SERVICE_NAME)])
+            .args(["enable", &format!("{}.service", GADGET_SERVICE_NAME)])
             .output()
             .map_err(|e| {
                 SetupError::SystemdServiceFailed(format!("Failed to run systemctl: {}", e))
@@ -108,22 +110,156 @@ WantedBy=multi-user.target
             )));
         }
 
-        info!("Enabled {} service", SERVICE_NAME);
+        info!("Enabled {} service", GADGET_SERVICE_NAME);
 
         Ok(())
     }
 
     fn is_service_enabled(&self) -> Result<bool, SetupError> {
         let output = Command::new("systemctl")
-            .args(["is-enabled", &format!("{}.service", SERVICE_NAME)])
+            .args(["is-enabled", &format!("{}.service", GADGET_SERVICE_NAME)])
             .output()
             .map_err(|e| {
                 SetupError::SystemdServiceFailed(format!("Failed to run systemctl: {}", e))
             })?;
 
         let result = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        debug!("Service {} is-enabled result: {}", SERVICE_NAME, result);
+        debug!("Service {} is-enabled result: {}", GADGET_SERVICE_NAME, result);
 
         Ok(result == "enabled")
+    }
+
+    fn create_web_service(&self) -> Result<(), SetupError> {
+        info!("Creating web UI systemd service file...");
+
+        let executable_path = Self::get_executable_path()?;
+
+        let service_content = format!(
+            r#"[Unit]
+Description=Splatoon3 Ghost Drawer Web Service
+After=network.target splatoon3-gadget.service
+Requires=splatoon3-gadget.service
+
+[Service]
+Type=simple
+ExecStart={} run
+Restart=always
+RestartSec=10
+User=root
+Environment="RUST_LOG=info"
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+"#,
+            executable_path
+        );
+
+        // Write service file
+        let mut file = fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open(WEB_SERVICE_FILE)
+            .map_err(|e| {
+                SetupError::SystemdServiceFailed(format!("Failed to create web service file: {}", e))
+            })?;
+
+        file.write_all(service_content.as_bytes())
+            .map_err(|e| SetupError::SystemdServiceFailed(format!("Failed to write web service file: {}", e)))?;
+
+        info!("Created web UI systemd service file at {}", WEB_SERVICE_FILE);
+
+        // Reload systemd daemon
+        let output = Command::new("systemctl")
+            .arg("daemon-reload")
+            .output()
+            .map_err(|e| {
+                SetupError::SystemdServiceFailed(format!("Failed to run systemctl: {}", e))
+            })?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(SetupError::SystemdServiceFailed(format!(
+                "systemctl daemon-reload failed: {}",
+                stderr
+            )));
+        }
+
+        info!("Reloaded systemd daemon for web service");
+
+        Ok(())
+    }
+
+    fn enable_web_service(&self) -> Result<(), SetupError> {
+        info!("Enabling web UI systemd service...");
+
+        let output = Command::new("systemctl")
+            .args(["enable", &format!("{}.service", WEB_SERVICE_NAME)])
+            .output()
+            .map_err(|e| {
+                SetupError::SystemdServiceFailed(format!("Failed to run systemctl: {}", e))
+            })?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(SetupError::SystemdServiceFailed(format!(
+                "systemctl enable failed: {}",
+                stderr
+            )));
+        }
+
+        info!("Enabled {} service", WEB_SERVICE_NAME);
+
+        Ok(())
+    }
+
+    fn disable_and_remove_services(&self) -> Result<(), SetupError> {
+        info!("Disabling and removing systemd services...");
+
+        // Stop and disable both services
+        for service_name in [GADGET_SERVICE_NAME, WEB_SERVICE_NAME] {
+            // Stop service
+            let _ = Command::new("systemctl")
+                .args(["stop", &format!("{}.service", service_name)])
+                .output();
+
+            // Disable service
+            let _ = Command::new("systemctl")
+                .args(["disable", &format!("{}.service", service_name)])
+                .output();
+        }
+
+        // Remove service files
+        for service_file in [GADGET_SERVICE_FILE, WEB_SERVICE_FILE] {
+            if std::path::Path::new(service_file).exists() {
+                fs::remove_file(service_file)
+                    .map_err(|e| SetupError::SystemdServiceFailed(
+                        format!("Failed to remove service file {}: {}", service_file, e)
+                    ))?;
+                info!("Removed service file: {}", service_file);
+            }
+        }
+
+        // Reload systemd daemon
+        let output = Command::new("systemctl")
+            .arg("daemon-reload")
+            .output()
+            .map_err(|e| {
+                SetupError::SystemdServiceFailed(format!("Failed to run systemctl: {}", e))
+            })?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(SetupError::SystemdServiceFailed(format!(
+                "systemctl daemon-reload failed: {}",
+                stderr
+            )));
+        }
+
+        info!("Removed all systemd services");
+
+        Ok(())
     }
 }

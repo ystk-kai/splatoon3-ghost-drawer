@@ -6,7 +6,7 @@ use std::sync::Arc;
 use tracing::{error, info};
 
 use splatoon3_ghost_drawer::application::use_cases::{
-    ConfigureUsbGadgetUseCase, RunApplicationUseCase, SetupSystemUseCase,
+    CleanupSystemUseCase, ConfigureUsbGadgetUseCase, RunApplicationUseCase, SetupSystemUseCase,
 };
 use splatoon3_ghost_drawer::debug::{init_logging, DebugConfig};
 use splatoon3_ghost_drawer::infrastructure::hardware::linux_usb_gadget_manager::LinuxUsbGadgetManager;
@@ -63,6 +63,27 @@ async fn main() -> anyhow::Result<()> {
                 Err(e) => {
                     error!("Application failed: {}", e);
                     eprintln!("❌ Application failed: {}", e);
+                    std::process::exit(1);
+                }
+            }
+        }
+        Commands::Cleanup => {
+            info!("Executing cleanup command...");
+            let use_case = CleanupSystemUseCase::new(
+                board_detector,
+                boot_configurator,
+                systemd_manager,
+            );
+            
+            match use_case.execute() {
+                Ok(_) => {
+                    println!("✅ System cleanup completed successfully!");
+                    println!("⚠️  Please reboot your device for the changes to take effect.");
+                    println!("    Run: sudo reboot");
+                }
+                Err(e) => {
+                    error!("Cleanup failed: {}", e);
+                    eprintln!("❌ Cleanup failed: {}", e);
                     std::process::exit(1);
                 }
             }

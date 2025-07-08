@@ -29,12 +29,16 @@ pub trait BoardDetector: Send + Sync {
 pub trait BootConfigurator: Send + Sync {
     fn configure_boot_for_otg(&self, board: &BoardModel) -> Result<(), SetupError>;
     fn is_boot_configured(&self, board: &BoardModel) -> Result<bool, SetupError>;
+    fn remove_boot_configuration(&self, board: &BoardModel) -> Result<(), SetupError>;
 }
 
 pub trait SystemdServiceManager: Send + Sync {
     fn create_gadget_service(&self) -> Result<(), SetupError>;
     fn enable_gadget_service(&self) -> Result<(), SetupError>;
     fn is_service_enabled(&self) -> Result<bool, SetupError>;
+    fn create_web_service(&self) -> Result<(), SetupError>;
+    fn enable_web_service(&self) -> Result<(), SetupError>;
+    fn disable_and_remove_services(&self) -> Result<(), SetupError>;
 }
 
 pub trait SystemSetupRepository: Send + Sync {

@@ -50,17 +50,25 @@ impl SetupSystemUseCase {
 
         // Check if systemd service exists and is enabled
         if !force && self.systemd_manager.is_service_enabled()? {
-            info!("Systemd service already enabled. Use --force to recreate.");
+            info!("Systemd gadget service already enabled. Use --force to recreate.");
         } else {
-            // Create systemd service
-            info!("Creating systemd service...");
+            // Create gadget systemd service
+            info!("Creating gadget systemd service...");
             self.systemd_manager.create_gadget_service()?;
 
-            // Enable systemd service
-            info!("Enabling systemd service...");
+            // Enable gadget systemd service
+            info!("Enabling gadget systemd service...");
             self.systemd_manager.enable_gadget_service()?;
-            info!("Systemd service enabled.");
+            info!("Gadget systemd service enabled.");
         }
+
+        // Create and enable web UI service
+        info!("Creating web UI systemd service...");
+        self.systemd_manager.create_web_service()?;
+        
+        info!("Enabling web UI systemd service...");
+        self.systemd_manager.enable_web_service()?;
+        info!("Web UI systemd service enabled.");
 
         info!("System setup completed successfully!");
         info!("Please reboot the device for changes to take effect.");
