@@ -41,7 +41,9 @@ impl LinuxBootConfigurator {
             for line in &mut lines {
                 if line.starts_with("overlays=") {
                     if !line.contains(board.otg_device_tree_overlay().unwrap()) {
-                        *line = new_overlay_line.clone();
+                        // Append to existing overlays
+                        let existing_overlays = line.split('=').nth(1).unwrap_or("");
+                        *line = format!("overlays={} {}", existing_overlays.trim(), board.otg_device_tree_overlay().unwrap());
                         info!("Updated overlays in {}", env_file);
                     }
                     found = true;
@@ -51,6 +53,26 @@ impl LinuxBootConfigurator {
             if !found {
                 lines.push(new_overlay_line.clone());
                 info!("Added overlays to {}", env_file);
+            }
+        }
+        
+        // Add USB OTG mode parameter for Orange Pi Zero 2W
+        if matches!(board, BoardModel::OrangePiZero2W) {
+            // Check for param_dwc2_dr_mode
+            let mut found_dr_mode = false;
+            for line in &mut lines {
+                if line.starts_with("param_dwc2_dr_mode=") {
+                    if line != "param_dwc2_dr_mode=otg" {
+                        *line = "param_dwc2_dr_mode=otg".to_string();
+                        info!("Updated param_dwc2_dr_mode to otg");
+                    }
+                    found_dr_mode = true;
+                    break;
+                }
+            }
+            if !found_dr_mode {
+                lines.push("param_dwc2_dr_mode=otg".to_string());
+                info!("Added param_dwc2_dr_mode=otg to {}", env_file);
             }
         }
 
