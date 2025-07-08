@@ -33,4 +33,5 @@ pub trait SystemdServiceRepository {
 pub trait UsbGadgetManager: Send + Sync {
     fn configure_as_pro_controller(&self) -> Result<(), SetupError>;
     fn is_gadget_configured(&self) -> Result<bool, SetupError>;
+    fn reconnect_gadget(&self) -> Result<(), SetupError>;
 }

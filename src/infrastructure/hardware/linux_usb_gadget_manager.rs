@@ -322,4 +322,53 @@ impl UsbGadgetManager for LinuxUsbGadgetManager {
         let udc_content = fs::read_to_string(&udc_path)?;
         Ok(!udc_content.trim().is_empty())
     }
+
+    fn reconnect_gadget(&self) -> Result<(), SetupError> {
+        info!("Reconnecting USB Gadget...");
+
+        // Get the current UDC name
+        let udc_path = format!("{}/UDC", GADGET_PATH);
+        let udc_name = if Path::new(&udc_path).exists() {
+            fs::read_to_string(&udc_path)
+                .ok()
+                .and_then(|s| {
+                    let trimmed = s.trim();
+                    if trimmed.is_empty() {
+                        None
+                    } else {
+                        Some(trimmed.to_string())
+                    }
+                })
+                .or_else(|| {
+                    // Try to get UDC name if not set
+                    self.get_udc_name().ok()
+                })
+        } else {
+            Some(self.get_udc_name()?)
+        };
+
+        // Disconnect the gadget
+        info!("Disconnecting gadget...");
+        fs::write(&udc_path, "").map_err(|e| {
+            error!("Failed to disconnect gadget: {}", e);
+            SetupError::FileSystemError(e)
+        })?;
+
+        // Wait a bit
+        std::thread::sleep(std::time::Duration::from_millis(500));
+
+        // Reconnect the gadget
+        info!("Reconnecting gadget with UDC: {}", udc_name.as_ref().unwrap_or(&"auto".to_string()));
+        if let Some(udc) = udc_name {
+            fs::write(&udc_path, &udc).map_err(|e| {
+                error!("Failed to reconnect gadget: {}", e);
+                SetupError::FileSystemError(e)
+            })?;
+        } else {
+            return Err(SetupError::Unknown("No UDC available for reconnection".to_string()));
+        }
+
+        info!("USB Gadget reconnected successfully!");
+        Ok(())
+    }
 }

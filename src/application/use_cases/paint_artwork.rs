@@ -3,16 +3,19 @@ use crate::domain::controller::{
     ButtonState, ControllerError, ControllerRepository, ControllerSession,
     ControllerSessionRepository, DPad, HidDeviceRepository, ProController, StickPosition,
 };
+use crate::domain::hardware::repositories::UsbGadgetManager;
 use crate::domain::painting::{ArtworkToCommandConverter, DrawingCanvasConfig, DrawingStrategy};
+use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::sleep;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 use uuid::Uuid;
 
 pub struct PaintArtworkUseCase<CR, HR, SR> {
     controller_repo: CR,
     hid_repo: HR,
     session_repo: SR,
+    gadget_manager: Option<Arc<dyn UsbGadgetManager>>,
 }
 
 impl<CR, HR, SR> PaintArtworkUseCase<CR, HR, SR>
@@ -26,7 +29,13 @@ where
             controller_repo,
             hid_repo,
             session_repo,
+            gadget_manager: None,
         }
+    }
+
+    pub fn with_gadget_manager(mut self, gadget_manager: Arc<dyn UsbGadgetManager>) -> Self {
+        self.gadget_manager = Some(gadget_manager);
+        self
     }
 
     pub async fn execute(
@@ -35,6 +44,22 @@ where
         config: PaintConfig,
     ) -> Result<PaintResult, ControllerError> {
         info!("アートワークの描画を開始: {}", artwork.metadata.name);
+
+        // 0. USB Gadget接続を再確立（オプション）
+        if let Some(gadget_manager) = &self.gadget_manager {
+            info!("USB Gadget接続を再確立します...");
+            match gadget_manager.reconnect_gadget() {
+                Ok(_) => {
+                    info!("USB Gadget接続を再確立しました");
+                    // 接続が安定するまで少し待つ
+                    sleep(Duration::from_millis(1000)).await;
+                }
+                Err(e) => {
+                    warn!("USB Gadget接続の再確立に失敗しました: {}", e);
+                    // エラーでも続行を試みる
+                }
+            }
+        }
 
         // 1. HIDデバイスの確認
         let devices = self.hid_repo.list_devices().await?;
