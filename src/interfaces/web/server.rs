@@ -25,11 +25,6 @@ pub async fn create_server(host: String, port: u16) -> anyhow::Result<()> {
 
     // Create the application router with all endpoints
     let app = Router::new()
-        // Serve static files from web directory with no-cache headers for development
-        .nest_service(
-            "/",
-            ServeDir::new("web").append_index_html_on_directories(true)
-        )
         // API endpoints
         .route("/api/health", get(|| async { "OK" }))
         .route("/api/system/info", get(get_system_info))
@@ -37,8 +32,8 @@ pub async fn create_server(host: String, port: u16) -> anyhow::Result<()> {
         // Artwork endpoints
         .route("/api/artworks", get(list_artworks).post(create_artwork))
         .route("/api/artworks/upload", post(upload_artwork))
-        .route("/api/artworks/:id", get(get_artwork).delete(delete_artwork))
-        .route("/api/artworks/:id/paint", post(paint_artwork))
+        .route("/api/artworks/{id}", get(get_artwork).delete(delete_artwork))
+        .route("/api/artworks/{id}/paint", post(paint_artwork))
         // WebSocket endpoint
         .route("/ws/logs", get(websocket_handler))
         // Add state
@@ -48,6 +43,10 @@ pub async fn create_server(host: String, port: u16) -> anyhow::Result<()> {
             ServiceBuilder::new()
                 .layer(DefaultBodyLimit::max(10 * 1024 * 1024)) // 10MB limit
                 .layer(CorsLayer::permissive())
+        )
+        // Serve static files from web directory as fallback
+        .fallback_service(
+            ServeDir::new("web").append_index_html_on_directories(true)
         );
 
     // Create TCP listener

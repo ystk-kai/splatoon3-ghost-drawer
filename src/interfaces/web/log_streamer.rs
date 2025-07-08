@@ -16,7 +16,7 @@ pub async fn stream_logs(mut socket: WebSocket) {
         "log_streamer",
     );
     
-    if socket.send(Message::Text(connect_msg)).await.is_err() {
+    if socket.send(Message::Text(connect_msg.into())).await.is_err() {
         return;
     }
 
@@ -33,7 +33,7 @@ pub async fn stream_logs(mut socket: WebSocket) {
                     "log_streamer",
                 );
                 
-                if socket.send(Message::Text(status_msg)).await.is_err() {
+                if socket.send(Message::Text(status_msg.into())).await.is_err() {
                     break;
                 }
             }
@@ -51,7 +51,7 @@ pub async fn stream_logs(mut socket: WebSocket) {
                                 "log_streamer",
                             );
                             
-                            if socket.send(Message::Text(pong_msg)).await.is_err() {
+                            if socket.send(Message::Text(pong_msg.into())).await.is_err() {
                                 break;
                             }
                         }
