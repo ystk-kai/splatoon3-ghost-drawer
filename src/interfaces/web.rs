@@ -5,6 +5,7 @@
 //! リアルタイムログストリーミングなどの機能を含みます。
 
 mod artwork_handlers;
+mod embedded_assets;
 mod error_response;
 mod handlers;
 mod log_streamer;

@@ -32,6 +32,20 @@ USB OTG (On-The-Go) 機能をサポートするLinuxボードが必要です：
 
 ### 1. インストール
 
+#### 方法A: リリース版のインストール（推奨）
+
+```bash
+# 最新リリースをダウンロード（例: v0.1.0）
+wget https://github.com/ystk-kai/splatoon3-ghost-drawer/releases/download/v0.1.0/splatoon3-ghost-drawer-linux-arm64.tar.gz
+tar -xzf splatoon3-ghost-drawer-linux-arm64.tar.gz
+
+# システムにインストール
+sudo cp splatoon3-ghost-drawer /usr/local/bin/
+sudo chmod +x /usr/local/bin/splatoon3-ghost-drawer
+```
+
+#### 方法B: ソースからビルド
+
 ```bash
 # Rustツールチェーンのインストール（未インストールの場合）
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
@@ -87,6 +101,33 @@ splatoon3-ghost-drawer run --host 127.0.0.1
 ### 4. Web UIにアクセス
 
 ブラウザで `http://[デバイスのIPアドレス]:8080` にアクセスして操作を開始します。
+
+## 使用上の注意
+
+### 描画を行う際の手順
+
+1. **Nintendo Switchでポスト投稿画面を開く**
+   - 実際のPro Controllerを使用してポスト投稿画面まで移動してください
+   - 描画キャンバスが表示されている状態にしてください
+
+2. **実際のコントローラーを置く**
+   - ポスト投稿画面を開いたら、実際のPro Controllerは使用しないでください
+   - 実際のコントローラーを使用すると、USB Gadget接続が切断されます
+
+3. **Web UIから描画を開始**
+   - ブラウザでWeb UIにアクセス
+   - 画像をアップロードして「Paint」ボタンをクリック
+   - 自動的にUSB Gadget接続が再確立されます
+
+### トラブルシューティング
+
+- **描画が始まらない場合**
+  - Orange PiとSwitchの接続を確認してください
+  - Web UIをリロードして再度試してください
+  
+- **途中で描画が止まった場合**
+  - 実際のコントローラーを触っていないか確認してください
+  - Web UIから再度描画を開始してください
 
 ## 開発
 

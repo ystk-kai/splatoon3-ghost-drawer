@@ -154,7 +154,6 @@ Requires=splatoon3-gadget.service
 
 [Service]
 Type=simple
-WorkingDirectory=/opt/splatoon3-ghost-drawer
 ExecStart={} run
 Restart=on-failure
 RestartSec=10
@@ -294,79 +293,8 @@ WantedBy=multi-user.target
         // Create application directory
         fs::create_dir_all(app_dir).map_err(|e| SetupError::FileSystemError(e))?;
 
-        // Get source directory (where the binary was executed from)
-        let exe_path = std::env::current_exe().map_err(|e| {
-            SetupError::SystemdServiceFailed(format!("Failed to get executable path: {}", e))
-        })?;
-
-        // Look for web directory in common locations
-        let web_dirs = [
-            // Primary location for installed package
-            Path::new("/usr/local/share/splatoon3-ghost-drawer/web").to_path_buf(),
-            Path::new("/usr/share/splatoon3-ghost-drawer/web").to_path_buf(),
-            // Development location
-            Path::new("/home/ystk/projects/splatoon3-ghost-drawer/web").to_path_buf(),
-            // Current directory (for manual runs)
-            Path::new("./web").to_path_buf(),
-            // Relative to binary location (for cargo install)
-            exe_path.parent()
-                .and_then(|p| p.parent())
-                .map(|p| p.join("share/splatoon3-ghost-drawer/web"))
-                .unwrap_or_default(),
-        ];
-
-        let mut web_src_found = false;
-        info!("Searching for web directory in the following locations:");
-        for path in &web_dirs {
-            info!("  - {:?}", path);
-        }
-        
-        for web_src in &web_dirs {
-            if web_src.exists() {
-                info!("Found web directory at: {:?}", web_src);
-
-                // Copy web directory
-                let web_dest = Path::new(app_dir).join("web");
-
-                // Remove existing web directory if it exists
-                if web_dest.exists() {
-                    fs::remove_dir_all(&web_dest).map_err(|e| SetupError::FileSystemError(e))?;
-                }
-
-                // Copy directory recursively
-                let output = Command::new("cp")
-                    .args([
-                        "-r",
-                        &web_src.to_string_lossy(),
-                        &web_dest.to_string_lossy(),
-                    ])
-                    .output()
-                    .map_err(|e| {
-                        SetupError::SystemdServiceFailed(format!(
-                            "Failed to copy web directory: {}",
-                            e
-                        ))
-                    })?;
-
-                if !output.status.success() {
-                    let stderr = String::from_utf8_lossy(&output.stderr);
-                    return Err(SetupError::SystemdServiceFailed(format!(
-                        "Failed to copy web directory: {}",
-                        stderr
-                    )));
-                }
-
-                info!("Copied web directory to {}", web_dest.display());
-                web_src_found = true;
-                break;
-            }
-        }
-
-        if !web_src_found {
-            return Err(SetupError::SystemdServiceFailed(
-                "Web directory not found. Please ensure the web directory is in the same location as the binary or install from the complete package.".to_string()
-            ));
-        }
+        // webディレクトリはバイナリに埋め込まれているため、コピーは不要
+        info!("Web assets are embedded in the binary, no need to copy files");
 
         // Copy the binary itself to /opt for consistency
         let binary_dest = Path::new(app_dir).join("splatoon3-ghost-drawer");
