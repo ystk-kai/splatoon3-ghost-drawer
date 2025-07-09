@@ -141,7 +141,9 @@ splatoon3-ghost-drawer run --host 127.0.0.1
   ```bash
   sudo splatoon3-ghost-drawer fix-connection
   ```
-  カーネルモジュールのロード、USB Gadgetのリセット、サービスの再起動を自動的に行います。
+  カーネルモジュールのロード、USB OTGモードの設定、USB Gadgetのリセット、サービスの再起動を自動的に行います。
+  
+  ※ Orange Pi Zero 2Wの詳細な設定については[ORANGE_PI_ZERO_2W_SETUP.md](docs/ORANGE_PI_ZERO_2W_SETUP.md)を参照してください。
 
 - **コントローラーテスト**
   ```bash

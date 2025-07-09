@@ -25,7 +25,10 @@ impl DiagnoseConnectionUseCase {
         // 3. HIDデバイスの確認
         self.check_hid_devices()?;
         
-        // 4. USB接続の確認
+        // 4. USB OTGモードの確認
+        self.check_otg_mode()?;
+        
+        // 5. USB接続の確認
         self.check_usb_connection()?;
         
         // 5. dmesgログの確認
@@ -154,6 +157,54 @@ impl DiagnoseConnectionUseCase {
                     }
                 }
             }
+        }
+        
+        println!();
+        Ok(())
+    }
+    
+    fn check_otg_mode(&self) -> Result<(), HardwareError> {
+        println!("🔄 USB OTG Mode:");
+        
+        // Find musb-hdrc mode files
+        let musb_dirs = vec![
+            "/sys/devices/platform/soc",
+            "/sys/devices/platform",
+        ];
+        
+        let mut found_otg = false;
+        
+        for base_dir in musb_dirs {
+            if let Ok(entries) = fs::read_dir(base_dir) {
+                for entry in entries {
+                    if let Ok(entry) = entry {
+                        let path = entry.path();
+                        let name = entry.file_name().to_string_lossy().to_string();
+                        
+                        if name.contains("usb") {
+                            let mode_path = path.join("musb-hdrc.4.auto/mode");
+                            if mode_path.exists() {
+                                found_otg = true;
+                                if let Ok(mode) = fs::read_to_string(&mode_path) {
+                                    let mode = mode.trim();
+                                    println!("   Mode: {}", mode);
+                                    
+                                    if mode == "peripheral" || mode == "b_peripheral" {
+                                        println!("   ✅ USB OTG is in peripheral mode");
+                                    } else {
+                                        println!("   ⚠️  USB OTG is in {} mode (should be peripheral)", mode);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        if !found_otg {
+            println!("   ❌ USB OTG mode file not found");
+            println!("   This may indicate USB OTG is not enabled in Device Tree");
         }
         
         println!();

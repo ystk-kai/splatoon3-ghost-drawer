@@ -35,10 +35,13 @@ impl<G: UsbGadgetManager> FixConnectionUseCase<G> {
         // 4. USB Gadgetサービスを再起動
         self.start_gadget_service()?;
         
-        // 5. 接続状態を確認
+        // 5. USB OTGモードを確認・設定
+        self.check_and_fix_otg_mode()?;
+        
+        // 6. 接続状態を確認
         self.check_connection_status()?;
         
-        // 6. 推奨事項を表示
+        // 7. 推奨事項を表示
         self.show_recommendations();
         
         Ok(())
@@ -192,6 +195,75 @@ impl<G: UsbGadgetManager> FixConnectionUseCase<G> {
             }
         } else {
             println!("   ❌ HID device not found");
+        }
+        
+        println!();
+        Ok(())
+    }
+    
+    fn check_and_fix_otg_mode(&self) -> Result<(), SetupError> {
+        println!("🔄 Checking USB OTG mode...");
+        
+        // Find musb-hdrc mode file
+        let musb_pattern = "/sys/devices/platform/soc/*.usb/musb-hdrc.*.auto/mode";
+        let mode_files = glob::glob(musb_pattern)
+            .map_err(|e| SetupError::Unknown(format!("Failed to glob pattern: {}", e)))?;
+        
+        let mut found_mode_file = false;
+        
+        for entry in mode_files {
+            if let Ok(path) = entry {
+                found_mode_file = true;
+                
+                // Read current mode
+                if let Ok(current_mode) = fs::read_to_string(&path) {
+                    let current_mode = current_mode.trim();
+                    println!("   Current mode: {}", current_mode);
+                    
+                    // Check if mode needs to be changed
+                    if current_mode != "peripheral" && current_mode != "b_peripheral" {
+                        println!("   ⚠️  USB OTG not in peripheral mode");
+                        
+                        // Try to set peripheral mode
+                        match fs::write(&path, "peripheral") {
+                            Ok(_) => {
+                                println!("   ✅ Set to peripheral mode");
+                                thread::sleep(Duration::from_millis(500));
+                            }
+                            Err(e) => {
+                                println!("   ❌ Failed to set peripheral mode: {}", e);
+                                println!("   💡 You may need to enable USB OTG in Device Tree");
+                            }
+                        }
+                    } else {
+                        println!("   ✅ Already in peripheral mode");
+                    }
+                } else {
+                    println!("   ⚠️  Cannot read USB mode file");
+                }
+            }
+        }
+        
+        if !found_mode_file {
+            println!("   ❌ No USB OTG mode file found");
+            println!("   💡 This may indicate:");
+            println!("      1. USB OTG is not enabled in Device Tree");
+            println!("      2. The musb driver is not loaded");
+            println!("      3. Different USB controller is being used");
+        }
+        
+        // Check Device Tree overlay configuration
+        let env_file = "/boot/orangepiEnv.txt";
+        if Path::new(env_file).exists() {
+            println!("\n📄 Checking Device Tree configuration...");
+            if let Ok(content) = fs::read_to_string(env_file) {
+                if content.contains("usb-otg") {
+                    println!("   ✅ usb-otg overlay is configured");
+                } else {
+                    println!("   ⚠️  usb-otg overlay not found in {}", env_file);
+                    println!("   💡 Add 'overlays=usb-otg' to {}", env_file);
+                }
+            }
         }
         
         println!();

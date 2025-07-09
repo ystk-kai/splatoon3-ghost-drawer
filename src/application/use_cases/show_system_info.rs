@@ -71,6 +71,25 @@ impl<D: BoardDetector, G: UsbGadgetManager> ShowSystemInfoUseCase<D, G> {
                     println!("      - Device tree overlay: {}", board.otg_device_tree_overlay().unwrap_or("None"));
                     println!("      - Requires config.txt: {}", if board.requires_config_txt() { "Yes" } else { "No" });
                     println!("      - USB device path: {}", board.usb_device_path());
+                    
+                    // Check Orange Pi Zero 2W specific configuration
+                    if matches!(board, BoardModel::OrangePiZero2W) {
+                        let env_files = vec!["/boot/orangepiEnv.txt", "/boot/armbianEnv.txt"];
+                        for env_file in env_files {
+                            if Path::new(env_file).exists() {
+                                println!("      - Boot env file: {}", env_file);
+                                if let Ok(content) = fs::read_to_string(env_file) {
+                                    if content.contains("usb-otg") {
+                                        println!("        ✅ USB OTG overlay enabled");
+                                    } else {
+                                        println!("        ❌ USB OTG overlay not enabled");
+                                        println!("        💡 Run 'sudo splatoon3-ghost-drawer setup' to configure");
+                                    }
+                                }
+                                break;
+                            }
+                        }
+                    }
                 }
             }
             Err(e) => {

@@ -19,41 +19,54 @@ impl LinuxBootConfigurator {
     }
 
     fn configure_armbian_env(&self, board: &BoardModel) -> Result<(), SetupError> {
-        let env_file = "/boot/armbianEnv.txt";
-
-        if !Path::new(env_file).exists() {
-            return Err(SetupError::BootConfigurationFailed(
-                "ArmbianEnv.txt not found".to_string(),
-            ));
+        // Orange Pi Zero 2W uses orangepiEnv.txt, other boards might use armbianEnv.txt
+        let env_files = vec!["/boot/orangepiEnv.txt", "/boot/armbianEnv.txt"];
+        let mut env_file_path = None;
+        
+        for file in &env_files {
+            if Path::new(file).exists() {
+                env_file_path = Some(*file);
+                break;
+            }
         }
+        
+        let env_file = env_file_path.ok_or_else(|| {
+            SetupError::BootConfigurationFailed(
+                "Neither orangepiEnv.txt nor armbianEnv.txt found".to_string(),
+            )
+        })?;
+        
+        info!("Using boot environment file: {}", env_file);
 
         // Read existing configuration
         let content = fs::read_to_string(env_file)?;
         let mut lines: Vec<String> = content.lines().map(|s| s.to_string()).collect();
 
         // Check and update overlays
-        let overlay_line = board
-            .otg_device_tree_overlay()
-            .map(|overlay| format!("overlays={}", overlay));
+        // For Orange Pi Zero 2W, we use "usb-otg" instead of the full overlay name
+        let overlay_to_add = if matches!(board, BoardModel::OrangePiZero2W) {
+            "usb-otg"
+        } else if let Some(overlay) = board.otg_device_tree_overlay() {
+            overlay
+        } else {
+            return Ok(()); // No overlay needed
+        };
 
-        if let Some(ref new_overlay_line) = overlay_line {
-            let mut found = false;
-            for line in &mut lines {
-                if line.starts_with("overlays=") {
-                    if !line.contains(board.otg_device_tree_overlay().unwrap()) {
-                        // Append to existing overlays
-                        let existing_overlays = line.split('=').nth(1).unwrap_or("");
-                        *line = format!("overlays={} {}", existing_overlays.trim(), board.otg_device_tree_overlay().unwrap());
-                        info!("Updated overlays in {}", env_file);
-                    }
-                    found = true;
-                    break;
+        let mut found = false;
+        for line in &mut lines {
+            if line.starts_with("overlays=") {
+                let existing_overlays = line.split('=').nth(1).unwrap_or("");
+                if !existing_overlays.contains(overlay_to_add) {
+                    *line = format!("overlays={} {}", existing_overlays.trim(), overlay_to_add).trim().to_string();
+                    info!("Updated overlays in {} (added {})", env_file, overlay_to_add);
                 }
+                found = true;
+                break;
             }
-            if !found {
-                lines.push(new_overlay_line.clone());
-                info!("Added overlays to {}", env_file);
-            }
+        }
+        if !found {
+            lines.push(format!("overlays={}", overlay_to_add));
+            info!("Added overlays={} to {}", overlay_to_add, env_file);
         }
         
         // Add USB OTG mode parameter for Orange Pi Zero 2W
@@ -155,17 +168,18 @@ impl BootConfigurator for LinuxBootConfigurator {
     fn is_boot_configured(&self, board: &BoardModel) -> Result<bool, SetupError> {
         match board {
             BoardModel::OrangePiZero2W => {
-                let env_file = "/boot/armbianEnv.txt";
-                if !Path::new(env_file).exists() {
-                    return Ok(false);
+                // Check both possible env files
+                let env_files = vec!["/boot/orangepiEnv.txt", "/boot/armbianEnv.txt"];
+                
+                for env_file in env_files {
+                    if Path::new(env_file).exists() {
+                        let content = fs::read_to_string(env_file)?;
+                        // Check for "usb-otg" which is what we actually add
+                        return Ok(content.contains("usb-otg"));
+                    }
                 }
-
-                let content = fs::read_to_string(env_file)?;
-                if let Some(overlay) = board.otg_device_tree_overlay() {
-                    Ok(content.contains(overlay))
-                } else {
-                    Ok(true)
-                }
+                
+                Ok(false)
             }
             BoardModel::RaspberryPiZero | BoardModel::RaspberryPiZero2W => {
                 let config_file = "/boot/config.txt";
@@ -185,22 +199,24 @@ impl BootConfigurator for LinuxBootConfigurator {
 
         match board {
             BoardModel::OrangePiZero2W => {
-                let env_file = "/boot/armbianEnv.txt";
-                if !Path::new(env_file).exists() {
-                    return Ok(());
-                }
+                let env_files = vec!["/boot/orangepiEnv.txt", "/boot/armbianEnv.txt"];
+                
+                for env_file in env_files {
+                    if !Path::new(env_file).exists() {
+                        continue;
+                    }
 
-                let content = fs::read_to_string(env_file)?;
-                let mut lines: Vec<String> = content.lines().map(|s| s.to_string()).collect();
-                let mut modified = false;
+                    let content = fs::read_to_string(env_file)?;
+                    let mut lines: Vec<String> = content.lines().map(|s| s.to_string()).collect();
+                    let mut modified = false;
 
-                if let Some(overlay) = board.otg_device_tree_overlay() {
+                    // Remove "usb-otg" overlay
                     for line in &mut lines {
-                        if line.starts_with("overlays=") && line.contains(overlay) {
+                        if line.starts_with("overlays=") && line.contains("usb-otg") {
                             // Remove the overlay from the line
                             let overlays: Vec<&str> = line[9..]
                                 .split(' ')
-                                .filter(|s| !s.contains(overlay))
+                                .filter(|s| !s.contains("usb-otg"))
                                 .collect();
 
                             if overlays.is_empty() {
@@ -212,21 +228,27 @@ impl BootConfigurator for LinuxBootConfigurator {
                             break;
                         }
                     }
-                }
-
-                if modified {
-                    // Remove empty lines
-                    lines.retain(|line| !line.is_empty());
-
-                    let mut file = fs::OpenOptions::new()
-                        .write(true)
-                        .truncate(true)
-                        .open(env_file)?;
-
-                    for line in &lines {
-                        writeln!(file, "{}", line)?;
+                    
+                    // Also remove param_dwc2_dr_mode line
+                    lines.retain(|line| !line.starts_with("param_dwc2_dr_mode="));
+                    if lines.len() != content.lines().count() {
+                        modified = true;
                     }
-                    info!("Removed USB OTG configuration from {}", env_file);
+
+                    if modified {
+                        // Remove empty lines
+                        lines.retain(|line| !line.is_empty());
+
+                        let mut file = fs::OpenOptions::new()
+                            .write(true)
+                            .truncate(true)
+                            .open(env_file)?;
+
+                        for line in &lines {
+                            writeln!(file, "{}", line)?;
+                        }
+                        info!("Removed USB OTG configuration from {}", env_file);
+                    }
                 }
 
                 Ok(())
