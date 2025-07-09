@@ -7,7 +7,7 @@ use tracing::{error, info};
 
 use splatoon3_ghost_drawer::application::use_cases::{
     CleanupSystemUseCase, ConfigureUsbGadgetUseCase, RunApplicationUseCase, SetupSystemUseCase,
-    TestControllerUseCase,
+    ShowSystemInfoUseCase, TestControllerUseCase,
 };
 use splatoon3_ghost_drawer::debug::{DebugConfig, init_logging};
 use splatoon3_ghost_drawer::infrastructure::hardware::linux_usb_gadget_manager::LinuxUsbGadgetManager;
@@ -79,6 +79,21 @@ async fn main() -> anyhow::Result<()> {
                 Err(e) => {
                     error!("Cleanup failed: {}", e);
                     eprintln!("❌ Cleanup failed: {}", e);
+                    std::process::exit(1);
+                }
+            }
+        }
+        Commands::Info { verbose } => {
+            info!("Showing system information...");
+            let use_case = ShowSystemInfoUseCase::new(board_detector, usb_gadget_manager);
+            
+            match use_case.execute(verbose) {
+                Ok(_) => {
+                    info!("System information displayed successfully");
+                }
+                Err(e) => {
+                    error!("Failed to show system info: {}", e);
+                    eprintln!("❌ Failed to show system info: {}", e);
                     std::process::exit(1);
                 }
             }

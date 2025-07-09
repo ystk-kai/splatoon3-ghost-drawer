@@ -8,7 +8,7 @@ use std::path::Path;
 use std::sync::Mutex;
 use std::thread;
 use std::time::Duration;
-use tracing::{debug, info};
+use tracing::{debug, error, info, warn};
 
 /// Linux HIDデバイスを使用したコントローラーエミュレーター
 pub struct LinuxHidController {
@@ -104,21 +104,43 @@ impl LinuxHidController {
             
             // 残りは0で埋める
             
-            // HIDデバイスに書き込み
-            let mut file = OpenOptions::new()
+            // HIDデバイスに書き込み（エラーハンドリング改善）
+            match OpenOptions::new()
                 .write(true)
-                .open(path)
-                .map_err(|e| HardwareError::IoError(e))?;
-                
-            file.write_all(&report)
-                .map_err(|e| HardwareError::IoError(e))?;
-                
-            debug!("Sent HID report");
+                .open(path) 
+            {
+                Ok(mut file) => {
+                    match file.write_all(&report) {
+                        Ok(_) => {
+                            debug!("Sent HID report");
+                            Ok(())
+                        }
+                        Err(e) => {
+                            if e.kind() == std::io::ErrorKind::BrokenPipe 
+                                || e.raw_os_error() == Some(108) // ESHUTDOWN
+                            {
+                                warn!("HID device disconnected: {}", e);
+                                Err(HardwareError::NotConnected)
+                            } else {
+                                error!("Failed to write HID report: {}", e);
+                                Err(HardwareError::IoError(e))
+                            }
+                        }
+                    }
+                }
+                Err(e) => {
+                    if e.kind() == std::io::ErrorKind::PermissionDenied {
+                        error!("Permission denied accessing HID device: {}", path);
+                        Err(HardwareError::PermissionDenied)
+                    } else {
+                        error!("Failed to open HID device {}: {}", path, e);
+                        Err(HardwareError::IoError(e))
+                    }
+                }
+            }
         } else {
-            return Err(HardwareError::NotInitialized);
+            Err(HardwareError::NotInitialized)
         }
-        
-        Ok(())
     }
 
     /// ボタン値を計算
@@ -147,17 +169,43 @@ impl ControllerEmulator for LinuxHidController {
     fn initialize(&self) -> Result<(), HardwareError> {
         info!("Initializing Linux HID controller...");
         
+        // USB Gadgetが設定されているか確認
+        let gadget_path = Path::new("/sys/kernel/config/usb_gadget/nintendo_controller");
+        if !gadget_path.exists() {
+            error!("USB Gadget not configured. Run 'sudo splatoon3-ghost-drawer setup' first.");
+            return Err(HardwareError::GadgetConfigurationFailed(
+                "USB Gadget not configured".to_string()
+            ));
+        }
+        
         // HIDデバイスを検索
         let device_path = self.find_hid_device()?;
+        info!("Found HID device at: {}", device_path);
+        
+        // デバイスの権限を確認
+        if let Err(e) = std::fs::metadata(&device_path) {
+            error!("Cannot access HID device {}: {}", device_path, e);
+            if e.kind() == std::io::ErrorKind::PermissionDenied {
+                return Err(HardwareError::PermissionDenied);
+            }
+            return Err(HardwareError::IoError(e));
+        }
         
         // デバイスパスを保存
         *self.device_path.lock().unwrap() = Some(device_path.clone());
         
-        // 初期状態を送信
-        self.send_report()?;
-        
-        info!("Linux HID controller initialized successfully");
-        Ok(())
+        // 初期状態を送信（エラーの場合は詳細情報を提供）
+        match self.send_report() {
+            Ok(_) => {
+                info!("Linux HID controller initialized successfully");
+                Ok(())
+            }
+            Err(e) => {
+                error!("Failed to send initial report: {}", e);
+                *self.device_path.lock().unwrap() = None;
+                Err(e)
+            }
+        }
     }
 
     fn is_connected(&self) -> Result<bool, HardwareError> {

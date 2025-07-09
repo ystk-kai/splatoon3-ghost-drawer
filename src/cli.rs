@@ -32,6 +32,13 @@ pub enum Commands {
     },
     /// Remove all configurations created by setup (requires root privileges)
     Cleanup,
+    /// Show system and connection information
+    #[command(name = "info")]
+    Info {
+        /// Show verbose output with detailed information
+        #[arg(short, long)]
+        verbose: bool,
+    },
     /// Test controller connection and functionality
     #[command(name = "test")]
     Test {

@@ -197,7 +197,7 @@ splatoon3-ghost-drawer run
 
 #### CLIコマンド
 
-このアプリケーションは4つのコマンドをサポートしています：
+このアプリケーションは5つのコマンドをサポートしています：
 
 ##### `setup` - システムセットアップ
 ```bash
@@ -224,6 +224,15 @@ splatoon3-ghost-drawer run --port 8888
 ```bash
 # setupで作成されたすべての設定を削除（要root権限）
 sudo splatoon3-ghost-drawer cleanup
+```
+
+##### `info` - システム情報表示
+```bash
+# 接続状態とシステム情報を表示
+splatoon3-ghost-drawer info
+
+# 詳細情報を表示
+splatoon3-ghost-drawer info --verbose
 ```
 
 ##### `test` - コントローラーテスト
