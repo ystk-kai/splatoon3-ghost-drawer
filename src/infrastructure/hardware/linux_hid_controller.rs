@@ -202,6 +202,35 @@ impl ControllerEmulator for LinuxHidController {
             }
             Err(e) => {
                 error!("Failed to send initial report: {}", e);
+                
+                // エラーの種類に応じて詳細情報を提供
+                match &e {
+                    HardwareError::NotConnected => {
+                        error!("HID device appears to be disconnected. This can happen if:");
+                        error!("1. Nintendo Switch is not ready to receive input");
+                        error!("2. USB cable is not properly connected");
+                        error!("3. USB Gadget needs to be reset");
+                        println!("\n❌ HID device is not connected properly.");
+                        println!("   Try the following:");
+                        println!("   1. Ensure Nintendo Switch is on the Home screen");
+                        println!("   2. Reconnect the USB cable");
+                        println!("   3. Run 'sudo systemctl restart splatoon3-gadget.service'");
+                    }
+                    HardwareError::PermissionDenied => {
+                        error!("Permission denied accessing HID device");
+                        println!("\n❌ Permission denied accessing HID device.");
+                        println!("   This command must be run with sudo.");
+                    }
+                    HardwareError::IoError(io_err) if io_err.kind() == std::io::ErrorKind::BrokenPipe => {
+                        error!("Broken pipe when writing to HID device");
+                        println!("\n❌ HID device connection was broken.");
+                        println!("   The USB connection may have been interrupted.");
+                    }
+                    _ => {
+                        error!("Unexpected error during initialization");
+                    }
+                }
+                
                 *self.device_path.lock().unwrap() = None;
                 Err(e)
             }
@@ -212,20 +241,65 @@ impl ControllerEmulator for LinuxHidController {
         let device_path = self.device_path.lock().unwrap();
         if let Some(path) = device_path.as_ref() {
             // デバイスファイルが存在し、書き込み可能かチェック
-            if Path::new(path).exists() {
-                // USB Gadgetの状態を確認
-                let gadget_path = Path::new("/sys/kernel/config/usb_gadget/nintendo_controller/UDC");
-                if gadget_path.exists() {
-                    let udc_content = std::fs::read_to_string(gadget_path)
-                        .map_err(|e| HardwareError::IoError(e))?;
-                    Ok(!udc_content.trim().is_empty())
-                } else {
+            if !Path::new(path).exists() {
+                warn!("HID device {} does not exist", path);
+                return Ok(false);
+            }
+            
+            // USB Gadgetの状態を確認
+            let gadget_path = Path::new("/sys/kernel/config/usb_gadget/nintendo_controller/UDC");
+            if !gadget_path.exists() {
+                warn!("USB Gadget UDC path does not exist");
+                return Ok(false);
+            }
+            
+            let udc_content = std::fs::read_to_string(gadget_path)
+                .map_err(|e| {
+                    error!("Failed to read UDC status: {}", e);
+                    HardwareError::IoError(e)
+                })?;
+                
+            let is_connected = !udc_content.trim().is_empty();
+            if !is_connected {
+                warn!("UDC is not bound (empty UDC file)");
+                return Ok(false);
+            } else {
+                debug!("UDC is bound to: {}", udc_content.trim());
+            }
+            
+            // 実際にHIDデバイスに書き込めるかテスト（接続状態の確認）
+            match OpenOptions::new()
+                .write(true)
+                .open(path) 
+            {
+                Ok(mut file) => {
+                    // 空のレポートを送信してテスト
+                    let test_report = [0u8; 64];
+                    match file.write_all(&test_report) {
+                        Ok(_) => {
+                            debug!("HID device is writable and connected");
+                            Ok(true)
+                        }
+                        Err(e) => {
+                            if e.kind() == std::io::ErrorKind::BrokenPipe 
+                                || e.raw_os_error() == Some(108) // ESHUTDOWN
+                            {
+                                warn!("HID device not ready: {}", e);
+                                Ok(false)
+                            } else {
+                                error!("Failed to test HID device: {}", e);
+                                Err(HardwareError::IoError(e))
+                            }
+                        }
+                    }
+                }
+                Err(e) => {
+                    error!("Cannot open HID device for testing: {}", e);
                     Ok(false)
                 }
-            } else {
-                Ok(false)
             }
         } else {
+            warn!("No HID device path configured");
             Ok(false)
         }
     }

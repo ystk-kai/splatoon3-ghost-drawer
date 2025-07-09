@@ -4,7 +4,7 @@ use std::fs;
 use std::io::Write;
 use std::path::Path;
 use std::process::Command;
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 
 const GADGET_PATH: &str = "/sys/kernel/config/usb_gadget/nintendo_controller";
 const VID: &str = "0x057e"; // Nintendo
@@ -69,12 +69,25 @@ impl LinuxUsbGadgetManager {
             
             // Try to load the necessary modules for Orange Pi Zero 2W
             info!("Attempting to load USB gadget modules...");
-            let _ = Command::new("modprobe")
-                .arg("sunxi")
-                .output();
-            let _ = Command::new("modprobe")
-                .arg("musb_hdrc")
-                .output();
+            
+            // For Orange Pi Zero 2W with Allwinner H616
+            let modules = vec!["sunxi", "musb_hdrc", "usb_f_hid"];
+            for module in modules {
+                info!("Loading module: {}", module);
+                let output = Command::new("modprobe")
+                    .arg(module)
+                    .output();
+                    
+                if let Ok(output) = output {
+                    if !output.status.success() {
+                        let stderr = String::from_utf8_lossy(&output.stderr);
+                        warn!("Failed to load module {}: {}", module, stderr);
+                    }
+                }
+            }
+            
+            // Wait a bit for modules to initialize
+            std::thread::sleep(std::time::Duration::from_millis(500));
             
             // Check again after loading modules
             if !Path::new(udc_dir).exists() {

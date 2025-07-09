@@ -129,6 +129,26 @@ splatoon3-ghost-drawer run --host 127.0.0.1
   - 実際のコントローラーを触っていないか確認してください
   - Web UIから再度描画を開始してください
 
+### 接続問題の診断と修正
+
+- **接続状態の診断**
+  ```bash
+  sudo splatoon3-ghost-drawer diagnose
+  ```
+  USB Gadget、HIDデバイス、カーネルモジュールの状態を詳しく確認できます。
+
+- **接続の修正（Orange Pi Zero 2W向け）**
+  ```bash
+  sudo splatoon3-ghost-drawer fix-connection
+  ```
+  カーネルモジュールのロード、USB Gadgetのリセット、サービスの再起動を自動的に行います。
+
+- **コントローラーテスト**
+  ```bash
+  sudo splatoon3-ghost-drawer test
+  ```
+  実際にボタンやスティックの操作をテストして、接続が正常に動作するか確認します。
+
 ## 開発
 
 ### 前提条件

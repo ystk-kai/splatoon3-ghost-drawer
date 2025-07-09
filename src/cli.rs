@@ -49,6 +49,12 @@ pub enum Commands {
         #[arg(short, long, default_value = "basic")]
         mode: String,
     },
+    /// Diagnose connection issues with detailed information
+    #[command(name = "diagnose")]
+    Diagnose,
+    /// Fix USB connection issues (mainly for Orange Pi Zero 2W)
+    #[command(name = "fix-connection")]
+    FixConnection,
     /// [Internal] Configure USB gadget via configfs (called by systemd)
     #[command(name = "_internal_configure_gadget", hide = true)]
     InternalConfigureGadget,

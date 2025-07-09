@@ -6,8 +6,9 @@ use std::sync::Arc;
 use tracing::{error, info};
 
 use splatoon3_ghost_drawer::application::use_cases::{
-    CleanupSystemUseCase, ConfigureUsbGadgetUseCase, RunApplicationUseCase, SetupSystemUseCase,
-    ShowSystemInfoUseCase, TestControllerUseCase,
+    CleanupSystemUseCase, ConfigureUsbGadgetUseCase, DiagnoseConnectionUseCase,
+    FixConnectionUseCase, RunApplicationUseCase, SetupSystemUseCase, ShowSystemInfoUseCase,
+    TestControllerUseCase,
 };
 use splatoon3_ghost_drawer::debug::{DebugConfig, init_logging};
 use splatoon3_ghost_drawer::infrastructure::hardware::linux_usb_gadget_manager::LinuxUsbGadgetManager;
@@ -120,6 +121,50 @@ async fn main() -> anyhow::Result<()> {
                 Err(e) => {
                     error!("Controller test failed: {}", e);
                     eprintln!("❌ Controller test failed: {}", e);
+                    std::process::exit(1);
+                }
+            }
+        }
+        Commands::Diagnose => {
+            info!("Running connection diagnostics...");
+            
+            // Check if we have proper permissions
+            if !nix::unistd::Uid::effective().is_root() {
+                eprintln!("❌ Error: This command requires root privileges.");
+                eprintln!("   Please run with sudo: sudo splatoon3-ghost-drawer diagnose");
+                std::process::exit(1);
+            }
+            
+            let use_case = DiagnoseConnectionUseCase::new();
+            match use_case.execute() {
+                Ok(_) => {
+                    info!("Diagnostics completed");
+                }
+                Err(e) => {
+                    error!("Diagnostics failed: {}", e);
+                    eprintln!("❌ Diagnostics failed: {}", e);
+                    std::process::exit(1);
+                }
+            }
+        }
+        Commands::FixConnection => {
+            info!("Fixing USB connection...");
+            
+            // Check if we have proper permissions
+            if !nix::unistd::Uid::effective().is_root() {
+                eprintln!("❌ Error: This command requires root privileges.");
+                eprintln!("   Please run with sudo: sudo splatoon3-ghost-drawer fix-connection");
+                std::process::exit(1);
+            }
+            
+            let use_case = FixConnectionUseCase::new(usb_gadget_manager.clone());
+            match use_case.execute() {
+                Ok(_) => {
+                    println!("✅ Connection fix completed!");
+                }
+                Err(e) => {
+                    error!("Connection fix failed: {}", e);
+                    eprintln!("❌ Connection fix failed: {}", e);
                     std::process::exit(1);
                 }
             }
