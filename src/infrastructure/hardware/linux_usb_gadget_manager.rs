@@ -86,11 +86,28 @@ impl LinuxUsbGadgetManager {
                 }
             }
             
+            // Orange Pi Zero 2W specific: enable USB OTG in device tree if needed
+            info!("Checking device tree overlays for Orange Pi Zero 2W...");
+            let overlay_cmd = Command::new("ls")
+                .arg("/boot/dtb/allwinner/overlay/")
+                .output();
+                
+            if let Ok(output) = overlay_cmd {
+                let overlays = String::from_utf8_lossy(&output.stdout);
+                if overlays.contains("usb-otg") || overlays.contains("usb_otg") {
+                    info!("USB OTG overlay available");
+                }
+            }
+            
             // Wait a bit for modules to initialize
-            std::thread::sleep(std::time::Duration::from_millis(500));
+            std::thread::sleep(std::time::Duration::from_millis(1000));
             
             // Check again after loading modules
             if !Path::new(udc_dir).exists() {
+                error!("UDC directory still not found. This may indicate:");
+                error!("1. USB OTG is not enabled in device tree");
+                error!("2. The musb driver is not compatible with your kernel");
+                error!("3. Hardware does not support USB OTG");
                 return Err(SetupError::Unknown("UDC directory not found after loading modules".to_string()));
             }
         }
@@ -144,6 +161,44 @@ impl UsbGadgetManager for LinuxUsbGadgetManager {
                     )));
                 }
             }
+        }
+        
+        // If gadget already exists, try to clean it up first
+        if Path::new(GADGET_PATH).exists() {
+            info!("Cleaning up existing gadget configuration...");
+            
+            // Unbind UDC if bound
+            let udc_path = format!("{}/UDC", GADGET_PATH);
+            if Path::new(&udc_path).exists() {
+                let _ = fs::write(&udc_path, "");
+                std::thread::sleep(std::time::Duration::from_millis(500));
+            }
+            
+            // Remove symlinks from configs
+            let config_path = format!("{}/configs/c.1/hid.usb0", GADGET_PATH);
+            if Path::new(&config_path).exists() {
+                let _ = fs::remove_file(&config_path);
+            }
+            
+            // Remove directories in reverse order
+            let dirs_to_remove = vec![
+                format!("{}/configs/c.1/strings/0x409", GADGET_PATH),
+                format!("{}/configs/c.1", GADGET_PATH),
+                format!("{}/configs", GADGET_PATH),
+                format!("{}/functions/hid.usb0", GADGET_PATH),
+                format!("{}/functions", GADGET_PATH),
+                format!("{}/strings/0x409", GADGET_PATH),
+                format!("{}/strings", GADGET_PATH),
+                GADGET_PATH.to_string(),
+            ];
+            
+            for dir in dirs_to_remove {
+                if Path::new(&dir).exists() {
+                    let _ = fs::remove_dir(&dir);
+                }
+            }
+            
+            std::thread::sleep(std::time::Duration::from_millis(500));
         }
 
         // Create gadget directory

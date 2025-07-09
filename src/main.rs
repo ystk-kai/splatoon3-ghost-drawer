@@ -6,9 +6,9 @@ use std::sync::Arc;
 use tracing::{error, info};
 
 use splatoon3_ghost_drawer::application::use_cases::{
-    CleanupSystemUseCase, ConfigureUsbGadgetUseCase, DiagnoseConnectionUseCase,
-    FixConnectionUseCase, RunApplicationUseCase, SetupSystemUseCase, ShowSystemInfoUseCase,
-    TestControllerUseCase,
+    CleanupGadgetUseCase, CleanupSystemUseCase, ConfigureUsbGadgetUseCase,
+    DiagnoseConnectionUseCase, FixConnectionUseCase, RunApplicationUseCase, SetupSystemUseCase,
+    ShowSystemInfoUseCase, TestControllerUseCase,
 };
 use splatoon3_ghost_drawer::debug::{DebugConfig, init_logging};
 use splatoon3_ghost_drawer::infrastructure::hardware::linux_usb_gadget_manager::LinuxUsbGadgetManager;
@@ -66,21 +66,38 @@ async fn main() -> anyhow::Result<()> {
                 }
             }
         }
-        Commands::Cleanup => {
-            info!("Executing cleanup command...");
-            let use_case =
-                CleanupSystemUseCase::new(board_detector, boot_configurator, systemd_manager);
-
-            match use_case.execute() {
-                Ok(_) => {
-                    println!("✅ System cleanup completed successfully!");
-                    println!("⚠️  Please reboot your device for the changes to take effect.");
-                    println!("    Run: sudo reboot");
+        Commands::Cleanup { gadget_only } => {
+            info!("Executing cleanup command (gadget_only: {})", gadget_only);
+            
+            if gadget_only {
+                // USB Gadgetのみクリーンアップ
+                let use_case = CleanupGadgetUseCase::new();
+                match use_case.execute() {
+                    Ok(_) => {
+                        println!("✅ USB Gadget cleanup completed successfully!");
+                    }
+                    Err(e) => {
+                        error!("Gadget cleanup failed: {}", e);
+                        eprintln!("❌ Gadget cleanup failed: {}", e);
+                        std::process::exit(1);
+                    }
                 }
-                Err(e) => {
-                    error!("Cleanup failed: {}", e);
-                    eprintln!("❌ Cleanup failed: {}", e);
-                    std::process::exit(1);
+            } else {
+                // システム全体のクリーンアップ
+                let use_case =
+                    CleanupSystemUseCase::new(board_detector, boot_configurator, systemd_manager);
+
+                match use_case.execute() {
+                    Ok(_) => {
+                        println!("✅ System cleanup completed successfully!");
+                        println!("⚠️  Please reboot your device for the changes to take effect.");
+                        println!("    Run: sudo reboot");
+                    }
+                    Err(e) => {
+                        error!("Cleanup failed: {}", e);
+                        eprintln!("❌ Cleanup failed: {}", e);
+                        std::process::exit(1);
+                    }
                 }
             }
         }

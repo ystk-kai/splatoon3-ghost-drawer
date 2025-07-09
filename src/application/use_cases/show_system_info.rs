@@ -41,6 +41,9 @@ impl<D: BoardDetector, G: UsbGadgetManager> ShowSystemInfoUseCase<D, G> {
             
             // USB関連の詳細情報
             self.show_usb_detail_info()?;
+            
+            // USB Gadgetのデバッグ情報
+            self.show_gadget_debug_info()?;
         }
         
         Ok(())
@@ -281,6 +284,145 @@ impl<D: BoardDetector, G: UsbGadgetManager> ShowSystemInfoUseCase<D, G> {
                         println!("      - {}", line);
                     }
                 }
+            }
+        }
+        
+        Ok(())
+    }
+    
+    fn show_gadget_debug_info(&self) -> Result<(), SetupError> {
+        println!("\n🐛 USB Gadget Debug Information:");
+        println!("   ================================");
+        
+        // ConfigFSのマウント状態
+        println!("\n   📁 ConfigFS Mount:");
+        let output = std::process::Command::new("mount")
+            .arg("-t")
+            .arg("configfs")
+            .output()
+            .map_err(|e| SetupError::Unknown(format!("Failed to check mount: {}", e)))?;
+            
+        let mount_info = String::from_utf8_lossy(&output.stdout);
+        if mount_info.is_empty() {
+            println!("      ❌ ConfigFS is not mounted");
+        } else {
+            for line in mount_info.lines() {
+                println!("      ✅ {}", line);
+            }
+        }
+        
+        // UDCデバイスの詳細
+        println!("\n   🔌 UDC Devices:");
+        let udc_dir = "/sys/class/udc";
+        
+        if !Path::new(udc_dir).exists() {
+            println!("      ❌ UDC directory does not exist");
+        } else if let Ok(entries) = fs::read_dir(udc_dir) {
+            let mut found_udc = false;
+            
+            for entry in entries {
+                if let Ok(entry) = entry {
+                    found_udc = true;
+                    let udc_name = entry.file_name();
+                    println!("      🟢 {}", udc_name.to_string_lossy());
+                    
+                    let udc_path = entry.path();
+                    
+                    // state
+                    if let Ok(state) = fs::read_to_string(udc_path.join("state")) {
+                        println!("         State: {}", state.trim());
+                    }
+                    
+                    // current_speed
+                    if let Ok(speed) = fs::read_to_string(udc_path.join("current_speed")) {
+                        println!("         Speed: {}", speed.trim());
+                    }
+                    
+                    // is_otg
+                    if let Ok(is_otg) = fs::read_to_string(udc_path.join("is_otg")) {
+                        println!("         OTG: {}", is_otg.trim());
+                    }
+                }
+            }
+            
+            if !found_udc {
+                println!("      ❌ No UDC devices found");
+                println!("      💡 Try: sudo modprobe musb_hdrc");
+            }
+        }
+        
+        // Gadgetディレクトリの詳細
+        println!("\n   📂 Gadget Directory:");
+        let gadget_path = "/sys/kernel/config/usb_gadget/nintendo_controller";
+        
+        if Path::new(gadget_path).exists() {
+            println!("      ✅ {} exists", gadget_path);
+            
+            // ディレクトリ内の主要ファイル
+            let important_files = vec![
+                "idVendor",
+                "idProduct",
+                "UDC",
+                "functions/hid.usb0/protocol",
+                "functions/hid.usb0/report_length",
+            ];
+            
+            for file in important_files {
+                let file_path = format!("{}/{}", gadget_path, file);
+                if let Ok(content) = fs::read_to_string(&file_path) {
+                    println!("      📄 {}: {}", file, content.trim());
+                }
+            }
+        } else {
+            println!("      ❌ Gadget directory does not exist");
+        }
+        
+        // 権限チェック
+        println!("\n   🔐 Permissions:");
+        let paths_to_check = vec![
+            "/sys/kernel/config",
+            "/sys/kernel/config/usb_gadget",
+            gadget_path,
+            "/dev/hidg0",
+        ];
+        
+        for path in paths_to_check {
+            if Path::new(path).exists() {
+                if let Ok(metadata) = fs::metadata(path) {
+                    use std::os::unix::fs::PermissionsExt;
+                    let mode = metadata.permissions().mode();
+                    let perms = format!("{:o}", mode & 0o777);
+                    println!("      {} ({})", path, perms);
+                }
+            }
+        }
+        
+        // 関連カーネルログ
+        println!("\n   📃 Recent Gadget-related Kernel Messages:");
+        if let Ok(output) = std::process::Command::new("dmesg")
+            .args(["-t"])
+            .output()
+        {
+            let dmesg = String::from_utf8_lossy(&output.stdout);
+            let gadget_lines: Vec<&str> = dmesg
+                .lines()
+                .rev()
+                .filter(|line| {
+                    line.contains("musb") || 
+                    line.contains("gadget") ||
+                    line.contains("configfs") ||
+                    line.contains("UDC") ||
+                    line.contains("nintendo")
+                })
+                .take(10)
+                .collect();
+                
+            if !gadget_lines.is_empty() {
+                for line in gadget_lines.iter().rev() {
+                    println!("      {}", line);
+                }
+            } else {
+                println!("      No gadget-related messages found");
             }
         }
         

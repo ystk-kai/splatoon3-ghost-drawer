@@ -31,7 +31,11 @@ pub enum Commands {
         host: String,
     },
     /// Remove all configurations created by setup (requires root privileges)
-    Cleanup,
+    Cleanup {
+        /// Only clean up USB Gadget configuration
+        #[arg(long)]
+        gadget_only: bool,
+    },
     /// Show system and connection information
     #[command(name = "info")]
     Info {
