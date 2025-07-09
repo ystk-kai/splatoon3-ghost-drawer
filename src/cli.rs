@@ -32,6 +32,16 @@ pub enum Commands {
     },
     /// Remove all configurations created by setup (requires root privileges)
     Cleanup,
+    /// Test controller connection and functionality
+    #[command(name = "test")]
+    Test {
+        /// Test duration in seconds (0 for manual control)
+        #[arg(short, long, default_value = "10")]
+        duration: u16,
+        /// Test mode: basic, buttons, sticks, or interactive
+        #[arg(short, long, default_value = "basic")]
+        mode: String,
+    },
     /// [Internal] Configure USB gadget via configfs (called by systemd)
     #[command(name = "_internal_configure_gadget", hide = true)]
     InternalConfigureGadget,

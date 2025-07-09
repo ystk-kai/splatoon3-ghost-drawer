@@ -7,6 +7,7 @@ use tracing::{error, info};
 
 use splatoon3_ghost_drawer::application::use_cases::{
     CleanupSystemUseCase, ConfigureUsbGadgetUseCase, RunApplicationUseCase, SetupSystemUseCase,
+    TestControllerUseCase,
 };
 use splatoon3_ghost_drawer::debug::{DebugConfig, init_logging};
 use splatoon3_ghost_drawer::infrastructure::hardware::linux_usb_gadget_manager::LinuxUsbGadgetManager;
@@ -78,6 +79,32 @@ async fn main() -> anyhow::Result<()> {
                 Err(e) => {
                     error!("Cleanup failed: {}", e);
                     eprintln!("❌ Cleanup failed: {}", e);
+                    std::process::exit(1);
+                }
+            }
+        }
+        Commands::Test { duration, mode } => {
+            info!("Starting controller test...");
+            
+            // Check if we have proper permissions
+            if !nix::unistd::Uid::effective().is_root() {
+                eprintln!("❌ Error: This command requires root privileges.");
+                eprintln!("   Please run with sudo: sudo splatoon3-ghost-drawer test");
+                std::process::exit(1);
+            }
+            
+            // Create controller emulator
+            use splatoon3_ghost_drawer::infrastructure::hardware::linux_hid_controller::LinuxHidController;
+            let controller = Arc::new(LinuxHidController::new());
+            let use_case = TestControllerUseCase::new(controller);
+
+            match use_case.execute(duration, &mode).await {
+                Ok(_) => {
+                    println!("✅ Controller test completed successfully!");
+                }
+                Err(e) => {
+                    error!("Controller test failed: {}", e);
+                    eprintln!("❌ Controller test failed: {}", e);
                     std::process::exit(1);
                 }
             }

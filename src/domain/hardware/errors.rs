@@ -28,6 +28,21 @@ pub enum HardwareError {
 
     #[error("File operation failed: {0}")]
     FileOperationFailed(String),
+    
+    #[error("Device not found: {0}")]
+    DeviceNotFound(String),
+    
+    #[error("Device not connected")]
+    NotConnected,
+    
+    #[error("Device not initialized")]
+    NotInitialized,
+    
+    #[error("Invalid parameter: {0}")]
+    InvalidParameter(String),
+    
+    #[error("I/O error: {0}")]
+    IoError(#[from] std::io::Error),
 
     #[error("Unknown error: {0}")]
     Unknown(String),

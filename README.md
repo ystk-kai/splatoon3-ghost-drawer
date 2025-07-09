@@ -197,7 +197,7 @@ splatoon3-ghost-drawer run
 
 #### CLIコマンド
 
-このアプリケーションは3つのコマンドをサポートしています：
+このアプリケーションは4つのコマンドをサポートしています：
 
 ##### `setup` - システムセットアップ
 ```bash
@@ -224,6 +224,24 @@ splatoon3-ghost-drawer run --port 8888
 ```bash
 # setupで作成されたすべての設定を削除（要root権限）
 sudo splatoon3-ghost-drawer cleanup
+```
+
+##### `test` - コントローラーテスト
+```bash
+# 基本的な接続テスト（要root権限）
+sudo splatoon3-ghost-drawer test
+
+# 10秒間のボタンテスト
+sudo splatoon3-ghost-drawer test --duration 10 --mode buttons
+
+# スティックテスト
+sudo splatoon3-ghost-drawer test --duration 20 --mode sticks
+
+# 利用可能なモード:
+# - basic: 基本動作テスト（Aボタンとスティック操作）
+# - buttons: 全ボタンの順次テスト
+# - sticks: アナログスティックの動作テスト
+# - interactive: インタラクティブモード（未実装）
 ```
 
 ##### ヘルプとバージョン
