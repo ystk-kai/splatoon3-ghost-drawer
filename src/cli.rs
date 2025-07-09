@@ -59,6 +59,9 @@ pub enum Commands {
     /// Fix USB connection issues (mainly for Orange Pi Zero 2W)
     #[command(name = "fix-connection")]
     FixConnection,
+    /// Fix HID device permissions (requires root privileges)
+    #[command(name = "fix-permissions")]
+    FixPermissions,
     /// [Internal] Configure USB gadget via configfs (called by systemd)
     #[command(name = "_internal_configure_gadget", hide = true)]
     InternalConfigureGadget,

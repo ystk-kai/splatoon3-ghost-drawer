@@ -135,6 +135,52 @@ impl LinuxUsbGadgetManager {
 
         Err(SetupError::Unknown("No UDC found".to_string()))
     }
+
+    fn configure_hid_permissions(&self) -> Result<(), SetupError> {
+        info!("Configuring HID device permissions...");
+
+        // Check for HID devices
+        for i in 0..4 {
+            let hid_path = format!("/dev/hidg{}", i);
+            if Path::new(&hid_path).exists() {
+                info!("Found HID device: {}", hid_path);
+                
+                // Change ownership to current user
+                if let Ok(uid) = std::env::var("SUDO_UID") {
+                    if let Ok(gid) = std::env::var("SUDO_GID") {
+                        info!("Setting permissions for {} to {}:{}", hid_path, uid, gid);
+                        
+                        let output = Command::new("chown")
+                            .arg(format!("{}:{}", uid, gid))
+                            .arg(&hid_path)
+                            .output()
+                            .map_err(|e| SetupError::Unknown(format!("Failed to change ownership: {}", e)))?;
+
+                        if !output.status.success() {
+                            let stderr = String::from_utf8_lossy(&output.stderr);
+                            warn!("Failed to change ownership of {}: {}", hid_path, stderr);
+                        }
+                    }
+                }
+                
+                // Set permissions to read/write for owner and group
+                let output = Command::new("chmod")
+                    .arg("664")
+                    .arg(&hid_path)
+                    .output()
+                    .map_err(|e| SetupError::Unknown(format!("Failed to change permissions: {}", e)))?;
+
+                if !output.status.success() {
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    warn!("Failed to change permissions of {}: {}", hid_path, stderr);
+                } else {
+                    info!("Set permissions for {} to 664", hid_path);
+                }
+            }
+        }
+
+        Ok(())
+    }
 }
 
 impl UsbGadgetManager for LinuxUsbGadgetManager {
@@ -369,6 +415,12 @@ impl UsbGadgetManager for LinuxUsbGadgetManager {
         // Enable the gadget
         let udc_name = self.get_udc_name()?;
         self.write_file(&format!("{}/UDC", GADGET_PATH), &udc_name)?;
+
+        // Wait for HID device to be created
+        std::thread::sleep(std::time::Duration::from_millis(1000));
+
+        // Set appropriate permissions for HID device
+        self.configure_hid_permissions()?;
 
         info!("USB Gadget configured successfully!");
 

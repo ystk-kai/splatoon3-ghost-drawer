@@ -7,7 +7,7 @@ use tracing::{error, info};
 
 use splatoon3_ghost_drawer::application::use_cases::{
     CleanupGadgetUseCase, CleanupSystemUseCase, ConfigureUsbGadgetUseCase,
-    DiagnoseConnectionUseCase, FixConnectionUseCase, RunApplicationUseCase, SetupSystemUseCase,
+    DiagnoseConnectionUseCase, FixConnectionUseCase, FixPermissionsUseCase, RunApplicationUseCase, SetupSystemUseCase,
     ShowSystemInfoUseCase, TestControllerUseCase,
 };
 use splatoon3_ghost_drawer::debug::{DebugConfig, init_logging};
@@ -19,7 +19,11 @@ use splatoon3_ghost_drawer::infrastructure::setup::{
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     // Initialize logging
-    let debug_config = DebugConfig::default();
+    let debug_config = DebugConfig {
+        enable_file_logging: false,
+        log_directory: "/tmp/splatoon3-ghost-drawer-logs".to_string(),
+        ..DebugConfig::default()
+    };
     if let Err(e) = init_logging(&debug_config) {
         eprintln!("Failed to initialize logging: {}", e);
     }
@@ -182,6 +186,28 @@ async fn main() -> anyhow::Result<()> {
                 Err(e) => {
                     error!("Connection fix failed: {}", e);
                     eprintln!("❌ Connection fix failed: {}", e);
+                    std::process::exit(1);
+                }
+            }
+        }
+        Commands::FixPermissions => {
+            info!("Fixing HID device permissions...");
+            
+            // Check if we have proper permissions
+            if !nix::unistd::Uid::effective().is_root() {
+                eprintln!("❌ Error: This command requires root privileges.");
+                eprintln!("   Please run with sudo: sudo splatoon3-ghost-drawer fix-permissions");
+                std::process::exit(1);
+            }
+            
+            let use_case = FixPermissionsUseCase::new(usb_gadget_manager.clone());
+            match use_case.execute() {
+                Ok(_) => {
+                    println!("✅ Permissions fix completed!");
+                }
+                Err(e) => {
+                    error!("Permissions fix failed: {}", e);
+                    eprintln!("❌ Permissions fix failed: {}", e);
                     std::process::exit(1);
                 }
             }
