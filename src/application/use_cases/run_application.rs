@@ -1,13 +1,8 @@
 use crate::interfaces::web::server::create_server;
 
+#[derive(Default)]
 pub struct RunApplicationUseCase {
     // Dependencies for the application would be injected here
-}
-
-impl Default for RunApplicationUseCase {
-    fn default() -> Self {
-        Self {}
-    }
 }
 
 impl RunApplicationUseCase {

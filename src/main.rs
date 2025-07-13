@@ -7,8 +7,8 @@ use tracing::{error, info};
 
 use splatoon3_ghost_drawer::application::use_cases::{
     CleanupGadgetUseCase, CleanupSystemUseCase, ConfigureUsbGadgetUseCase,
-    DiagnoseConnectionUseCase, FixConnectionUseCase, FixPermissionsUseCase, RunApplicationUseCase, SetupSystemUseCase,
-    ShowSystemInfoUseCase, TestControllerUseCase,
+    DiagnoseConnectionUseCase, FixConnectionUseCase, FixPermissionsUseCase, RunApplicationUseCase,
+    SetupSystemUseCase, ShowSystemInfoUseCase, TestControllerUseCase,
 };
 use splatoon3_ghost_drawer::debug::{DebugConfig, init_logging};
 use splatoon3_ghost_drawer::infrastructure::hardware::linux_usb_gadget_manager::LinuxUsbGadgetManager;
@@ -72,7 +72,7 @@ async fn main() -> anyhow::Result<()> {
         }
         Commands::Cleanup { gadget_only } => {
             info!("Executing cleanup command (gadget_only: {})", gadget_only);
-            
+
             if gadget_only {
                 // USB Gadgetのみクリーンアップ
                 let use_case = CleanupGadgetUseCase::new();
@@ -108,7 +108,7 @@ async fn main() -> anyhow::Result<()> {
         Commands::Info { verbose } => {
             info!("Showing system information...");
             let use_case = ShowSystemInfoUseCase::new(board_detector, usb_gadget_manager);
-            
+
             match use_case.execute(verbose) {
                 Ok(_) => {
                     info!("System information displayed successfully");
@@ -122,14 +122,14 @@ async fn main() -> anyhow::Result<()> {
         }
         Commands::Test { duration, mode } => {
             info!("Starting controller test...");
-            
+
             // Check if we have proper permissions
             if !nix::unistd::Uid::effective().is_root() {
                 eprintln!("❌ Error: This command requires root privileges.");
                 eprintln!("   Please run with sudo: sudo splatoon3-ghost-drawer test");
                 std::process::exit(1);
             }
-            
+
             // Create controller emulator
             use splatoon3_ghost_drawer::infrastructure::hardware::linux_hid_controller::LinuxHidController;
             let controller = Arc::new(LinuxHidController::new());
@@ -148,14 +148,14 @@ async fn main() -> anyhow::Result<()> {
         }
         Commands::Diagnose => {
             info!("Running connection diagnostics...");
-            
+
             // Check if we have proper permissions
             if !nix::unistd::Uid::effective().is_root() {
                 eprintln!("❌ Error: This command requires root privileges.");
                 eprintln!("   Please run with sudo: sudo splatoon3-ghost-drawer diagnose");
                 std::process::exit(1);
             }
-            
+
             let use_case = DiagnoseConnectionUseCase::new();
             match use_case.execute() {
                 Ok(_) => {
@@ -170,14 +170,14 @@ async fn main() -> anyhow::Result<()> {
         }
         Commands::FixConnection => {
             info!("Fixing USB connection...");
-            
+
             // Check if we have proper permissions
             if !nix::unistd::Uid::effective().is_root() {
                 eprintln!("❌ Error: This command requires root privileges.");
                 eprintln!("   Please run with sudo: sudo splatoon3-ghost-drawer fix-connection");
                 std::process::exit(1);
             }
-            
+
             let use_case = FixConnectionUseCase::new(usb_gadget_manager.clone());
             match use_case.execute() {
                 Ok(_) => {
@@ -192,14 +192,14 @@ async fn main() -> anyhow::Result<()> {
         }
         Commands::FixPermissions => {
             info!("Fixing HID device permissions...");
-            
+
             // Check if we have proper permissions
             if !nix::unistd::Uid::effective().is_root() {
                 eprintln!("❌ Error: This command requires root privileges.");
                 eprintln!("   Please run with sudo: sudo splatoon3-ghost-drawer fix-permissions");
                 std::process::exit(1);
             }
-            
+
             let use_case = FixPermissionsUseCase::new(usb_gadget_manager.clone());
             match use_case.execute() {
                 Ok(_) => {

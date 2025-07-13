@@ -15,13 +15,21 @@ impl LinuxUsbGadgetManager {
             configfs_path: "/sys/kernel/config/usb_gadget".to_string(),
         }
     }
+}
 
+impl Default for LinuxUsbGadgetManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl LinuxUsbGadgetManager {
     async fn ensure_configfs_mounted(&self) -> Result<(), HardwareError> {
         let path = Path::new(&self.configfs_path);
         if !path.exists() {
             // Try to mount configfs
             let output = Command::new("sudo")
-                .args(&["mount", "-t", "configfs", "none", "/sys/kernel/config"])
+                .args(["mount", "-t", "configfs", "none", "/sys/kernel/config"])
                 .output()
                 .await
                 .map_err(|e| {

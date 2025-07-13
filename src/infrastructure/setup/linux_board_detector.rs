@@ -13,7 +13,7 @@ impl Default for LinuxBoardDetector {
 
 impl LinuxBoardDetector {
     pub fn new() -> Self {
-        Self::default()
+        Self
     }
 }
 

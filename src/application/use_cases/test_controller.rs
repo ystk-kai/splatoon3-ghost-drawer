@@ -16,7 +16,10 @@ impl<E: ControllerEmulator> TestControllerUseCase<E> {
     }
 
     pub async fn execute(&self, duration: u16, mode: &str) -> Result<(), HardwareError> {
-        info!("Starting controller test (mode: {}, duration: {}s)", mode, duration);
+        info!(
+            "Starting controller test (mode: {}, duration: {}s)",
+            mode, duration
+        );
 
         // 初期化
         self.emulator.initialize()?;
@@ -60,7 +63,7 @@ impl<E: ControllerEmulator> TestControllerUseCase<E> {
         println!("   This test will:");
         println!("   - Press A button every 2 seconds");
         println!("   - Move left stick in a circle");
-        
+
         let start_time = std::time::Instant::now();
         let test_duration = if duration == 0 {
             Duration::from_secs(10)
@@ -76,21 +79,21 @@ impl<E: ControllerEmulator> TestControllerUseCase<E> {
                 .add_action(ControllerAction::press_button(Button::A, 100))
                 .add_action(ControllerAction::release_button(Button::A, 100))
                 .add_action(ControllerAction::wait(1000));
-            
+
             self.emulator.execute_command(&command)?;
 
             // 左スティックを円を描くように動かす
             println!("   Moving left stick in circle...");
             let stick_positions = vec![
-                (0, 127),    // Up
-                (127, 127),  // Up-Right
-                (127, 0),    // Right
-                (127, -127), // Down-Right
-                (0, -127),   // Down
-                (-127, -127),// Down-Left
-                (-127, 0),   // Left
-                (-127, 127), // Up-Left
-                (0, 0),      // Center
+                (0, 127),     // Up
+                (127, 127),   // Up-Right
+                (127, 0),     // Right
+                (127, -127),  // Down-Right
+                (0, -127),    // Down
+                (-127, -127), // Down-Left
+                (-127, 0),    // Left
+                (-127, 127),  // Up-Left
+                (0, 0),       // Center
             ];
 
             for (x, y) in stick_positions {
@@ -99,12 +102,12 @@ impl<E: ControllerEmulator> TestControllerUseCase<E> {
                     .add_action(ControllerAction::move_left_stick(
                         crate::domain::controller::StickPosition::new(
                             (x as i16 + 128) as u8,
-                            (y as i16 + 128) as u8
+                            (y as i16 + 128) as u8,
                         ),
-                        200
+                        200,
                     ))
                     .add_action(ControllerAction::wait(200));
-                
+
                 self.emulator.execute_command(&command)?;
             }
 
@@ -119,7 +122,7 @@ impl<E: ControllerEmulator> TestControllerUseCase<E> {
     async fn run_button_test(&self, duration: u16) -> Result<(), HardwareError> {
         println!("\n🎮 Running button test...");
         println!("   Testing all buttons sequentially:");
-        
+
         let buttons = vec![
             (Button::A, "A"),
             (Button::B, "B"),
@@ -148,15 +151,15 @@ impl<E: ControllerEmulator> TestControllerUseCase<E> {
         while start_time.elapsed() < test_duration && button_index < buttons.len() {
             let (button, name) = &buttons[button_index];
             println!("   Testing {} button...", name);
-            
+
             let mut command = ControllerCommand::new(format!("Test {} button", name));
             command = command
                 .add_action(ControllerAction::press_button(*button, 200))
                 .add_action(ControllerAction::release_button(*button, 200))
                 .add_action(ControllerAction::wait(1000));
-            
+
             self.emulator.execute_command(&command)?;
-            
+
             button_index = (button_index + 1) % buttons.len();
             sleep(Duration::from_millis(500)).await;
         }
@@ -169,7 +172,7 @@ impl<E: ControllerEmulator> TestControllerUseCase<E> {
     async fn run_stick_test(&self, duration: u16) -> Result<(), HardwareError> {
         println!("\n🎮 Running stick test...");
         println!("   Testing both analog sticks:");
-        
+
         let start_time = std::time::Instant::now();
         let test_duration = if duration == 0 {
             Duration::from_secs(20)
@@ -184,60 +187,58 @@ impl<E: ControllerEmulator> TestControllerUseCase<E> {
                 let radians = (angle as f64).to_radians();
                 let x = (127.0 * radians.cos()) as i8;
                 let y = (127.0 * radians.sin()) as i8;
-                
+
                 let mut command = ControllerCommand::new("Test left stick");
-                command = command
-                    .add_action(ControllerAction::move_left_stick(
-                        crate::domain::controller::StickPosition::new(
-                            (x as i16 + 128) as u8,
-                            (y as i16 + 128) as u8
-                        ),
-                        100
-                    ));
-                
+                command = command.add_action(ControllerAction::move_left_stick(
+                    crate::domain::controller::StickPosition::new(
+                        (x as i16 + 128) as u8,
+                        (y as i16 + 128) as u8,
+                    ),
+                    100,
+                ));
+
                 self.emulator.execute_command(&command)?;
                 sleep(Duration::from_millis(100)).await;
             }
-            
+
             // センターに戻す
             let mut command = ControllerCommand::new("Center left stick");
             command = command.add_action(ControllerAction::move_left_stick(
                 crate::domain::controller::StickPosition::new(128, 128),
-                100
+                100,
             ));
             self.emulator.execute_command(&command)?;
-            
+
             sleep(Duration::from_millis(500)).await;
-            
+
             // 右スティックテスト
             println!("   Testing right stick...");
             for angle in (0..360).step_by(30) {
                 let radians = (angle as f64).to_radians();
                 let x = (127.0 * radians.cos()) as i8;
                 let y = (127.0 * radians.sin()) as i8;
-                
+
                 let mut command = ControllerCommand::new("Test right stick");
-                command = command
-                    .add_action(ControllerAction::move_right_stick(
-                        crate::domain::controller::StickPosition::new(
-                            (x as i16 + 128) as u8,
-                            (y as i16 + 128) as u8
-                        ),
-                        100
-                    ));
-                
+                command = command.add_action(ControllerAction::move_right_stick(
+                    crate::domain::controller::StickPosition::new(
+                        (x as i16 + 128) as u8,
+                        (y as i16 + 128) as u8,
+                    ),
+                    100,
+                ));
+
                 self.emulator.execute_command(&command)?;
                 sleep(Duration::from_millis(100)).await;
             }
-            
+
             // センターに戻す
             let mut command = ControllerCommand::new("Center right stick");
             command = command.add_action(ControllerAction::move_right_stick(
                 crate::domain::controller::StickPosition::new(128, 128),
-                100
+                100,
             ));
             self.emulator.execute_command(&command)?;
-            
+
             sleep(Duration::from_millis(1000)).await;
         }
 
@@ -250,9 +251,9 @@ impl<E: ControllerEmulator> TestControllerUseCase<E> {
         println!("\n🎮 Interactive test mode");
         println!("   This mode is not yet implemented.");
         println!("   In the future, it will allow manual control via keyboard input.");
-        
+
         // TODO: キーボード入力を受け付けて、リアルタイムでコントローラーを操作
-        
+
         Ok(())
     }
 }

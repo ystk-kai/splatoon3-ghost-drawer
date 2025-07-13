@@ -16,7 +16,7 @@ impl Default for SystemdServiceManager {
 
 impl SystemdServiceManager {
     pub fn new() -> Self {
-        Self::default()
+        Self
     }
 
     async fn run_systemctl(&self, args: &[&str]) -> Result<std::process::Output, HardwareError> {
@@ -139,7 +139,7 @@ fi
 
         // Make script executable
         let output = Command::new("sudo")
-            .args(&["chmod", "+x", setup_script_path])
+            .args(["chmod", "+x", setup_script_path])
             .output()
             .await
             .map_err(|e| {
@@ -194,7 +194,7 @@ echo "USB Gadget removed"
 
         // Make removal script executable
         Command::new("sudo")
-            .args(&["chmod", "+x", remove_script_path])
+            .args(["chmod", "+x", remove_script_path])
             .output()
             .await
             .map_err(|e| {

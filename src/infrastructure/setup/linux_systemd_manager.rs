@@ -20,7 +20,7 @@ impl Default for LinuxSystemdManager {
 
 impl LinuxSystemdManager {
     pub fn new() -> Self {
-        Self::default()
+        Self
     }
 
     fn get_executable_path() -> Result<String, SetupError> {
@@ -291,7 +291,7 @@ WantedBy=multi-user.target
         let app_dir = "/opt/splatoon3-ghost-drawer";
 
         // Create application directory
-        fs::create_dir_all(app_dir).map_err(|e| SetupError::FileSystemError(e))?;
+        fs::create_dir_all(app_dir).map_err(SetupError::FileSystemError)?;
 
         // webディレクトリはバイナリに埋め込まれているため、コピーは不要
         info!("Web assets are embedded in the binary, no need to copy files");
@@ -341,7 +341,7 @@ WantedBy=multi-user.target
         let app_dir = "/opt/splatoon3-ghost-drawer";
 
         if Path::new(app_dir).exists() {
-            fs::remove_dir_all(app_dir).map_err(|e| SetupError::FileSystemError(e))?;
+            fs::remove_dir_all(app_dir).map_err(SetupError::FileSystemError)?;
             info!("Removed application directory: {}", app_dir);
         }
 

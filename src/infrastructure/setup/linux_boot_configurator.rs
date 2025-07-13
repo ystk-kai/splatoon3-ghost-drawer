@@ -15,27 +15,27 @@ impl Default for LinuxBootConfigurator {
 
 impl LinuxBootConfigurator {
     pub fn new() -> Self {
-        Self::default()
+        Self
     }
 
     fn configure_armbian_env(&self, board: &BoardModel) -> Result<(), SetupError> {
         // Orange Pi Zero 2W uses orangepiEnv.txt, other boards might use armbianEnv.txt
         let env_files = vec!["/boot/orangepiEnv.txt", "/boot/armbianEnv.txt"];
         let mut env_file_path = None;
-        
+
         for file in &env_files {
             if Path::new(file).exists() {
                 env_file_path = Some(*file);
                 break;
             }
         }
-        
+
         let env_file = env_file_path.ok_or_else(|| {
             SetupError::BootConfigurationFailed(
                 "Neither orangepiEnv.txt nor armbianEnv.txt found".to_string(),
             )
         })?;
-        
+
         info!("Using boot environment file: {}", env_file);
 
         // Read existing configuration
@@ -57,8 +57,13 @@ impl LinuxBootConfigurator {
             if line.starts_with("overlays=") {
                 let existing_overlays = line.split('=').nth(1).unwrap_or("");
                 if !existing_overlays.contains(overlay_to_add) {
-                    *line = format!("overlays={} {}", existing_overlays.trim(), overlay_to_add).trim().to_string();
-                    info!("Updated overlays in {} (added {})", env_file, overlay_to_add);
+                    *line = format!("overlays={} {}", existing_overlays.trim(), overlay_to_add)
+                        .trim()
+                        .to_string();
+                    info!(
+                        "Updated overlays in {} (added {})",
+                        env_file, overlay_to_add
+                    );
                 }
                 found = true;
                 break;
@@ -68,7 +73,7 @@ impl LinuxBootConfigurator {
             lines.push(format!("overlays={}", overlay_to_add));
             info!("Added overlays={} to {}", overlay_to_add, env_file);
         }
-        
+
         // Add USB OTG mode parameter for Orange Pi Zero 2W
         if matches!(board, BoardModel::OrangePiZero2W) {
             // Check for param_dwc2_dr_mode
@@ -170,7 +175,7 @@ impl BootConfigurator for LinuxBootConfigurator {
             BoardModel::OrangePiZero2W => {
                 // Check both possible env files
                 let env_files = vec!["/boot/orangepiEnv.txt", "/boot/armbianEnv.txt"];
-                
+
                 for env_file in env_files {
                     if Path::new(env_file).exists() {
                         let content = fs::read_to_string(env_file)?;
@@ -178,7 +183,7 @@ impl BootConfigurator for LinuxBootConfigurator {
                         return Ok(content.contains("usb-otg"));
                     }
                 }
-                
+
                 Ok(false)
             }
             BoardModel::RaspberryPiZero | BoardModel::RaspberryPiZero2W => {
@@ -200,7 +205,7 @@ impl BootConfigurator for LinuxBootConfigurator {
         match board {
             BoardModel::OrangePiZero2W => {
                 let env_files = vec!["/boot/orangepiEnv.txt", "/boot/armbianEnv.txt"];
-                
+
                 for env_file in env_files {
                     if !Path::new(env_file).exists() {
                         continue;
@@ -228,7 +233,7 @@ impl BootConfigurator for LinuxBootConfigurator {
                             break;
                         }
                     }
-                    
+
                     // Also remove param_dwc2_dr_mode line
                     lines.retain(|line| !line.starts_with("param_dwc2_dr_mode="));
                     if lines.len() != content.lines().count() {

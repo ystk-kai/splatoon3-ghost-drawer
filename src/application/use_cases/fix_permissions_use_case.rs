@@ -9,9 +9,7 @@ pub struct FixPermissionsUseCase {
 
 impl FixPermissionsUseCase {
     pub fn new(usb_gadget_manager: Arc<dyn UsbGadgetManager>) -> Self {
-        Self {
-            usb_gadget_manager,
-        }
+        Self { usb_gadget_manager }
     }
 
     pub fn execute(&self) -> Result<(), SetupError> {
@@ -20,7 +18,7 @@ impl FixPermissionsUseCase {
         // Check if gadget is configured
         if !self.usb_gadget_manager.is_gadget_configured()? {
             return Err(SetupError::Unknown(
-                "USB Gadget is not configured. Please run 'fix-connection' first.".to_string()
+                "USB Gadget is not configured. Please run 'fix-connection' first.".to_string(),
             ));
         }
 
@@ -43,17 +41,19 @@ impl FixPermissionsUseCase {
             let hid_path = format!("/dev/hidg{}", i);
             if Path::new(&hid_path).exists() {
                 info!("Found HID device: {}", hid_path);
-                
+
                 // Change ownership to the original user if run with sudo
                 if let Ok(uid) = std::env::var("SUDO_UID") {
                     if let Ok(gid) = std::env::var("SUDO_GID") {
                         info!("Setting permissions for {} to {}:{}", hid_path, uid, gid);
-                        
+
                         let output = Command::new("chown")
                             .arg(format!("{}:{}", uid, gid))
                             .arg(&hid_path)
                             .output()
-                            .map_err(|e| SetupError::Unknown(format!("Failed to change ownership: {}", e)))?;
+                            .map_err(|e| {
+                                SetupError::Unknown(format!("Failed to change ownership: {}", e))
+                            })?;
 
                         if !output.status.success() {
                             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -63,13 +63,15 @@ impl FixPermissionsUseCase {
                         }
                     }
                 }
-                
+
                 // Set permissions to read/write for owner and group
                 let output = Command::new("chmod")
                     .arg("664")
                     .arg(&hid_path)
                     .output()
-                    .map_err(|e| SetupError::Unknown(format!("Failed to change permissions: {}", e)))?;
+                    .map_err(|e| {
+                        SetupError::Unknown(format!("Failed to change permissions: {}", e))
+                    })?;
 
                 if !output.status.success() {
                     let stderr = String::from_utf8_lossy(&output.stderr);

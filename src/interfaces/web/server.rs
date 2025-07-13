@@ -1,13 +1,13 @@
 use super::{
-    ArtworkState, create_artwork, delete_artwork, get_artwork, get_hardware_status,
-    get_system_info, list_artworks, paint_artwork, upload_artwork, websocket_handler,
-    embedded_assets::WebAssets,
+    ArtworkState, create_artwork, delete_artwork, embedded_assets::WebAssets, get_artwork,
+    get_hardware_status, get_system_info, list_artworks, paint_artwork, upload_artwork,
+    websocket_handler,
 };
 use axum::{
     Router,
     body::Body,
     extract::DefaultBodyLimit,
-    http::{header, StatusCode, Uri},
+    http::{StatusCode, Uri, header},
     response::{IntoResponse, Response},
     routing::{get, post},
 };
@@ -72,7 +72,7 @@ pub async fn create_server(host: String, port: u16) -> anyhow::Result<()> {
 /// 埋め込まれた静的ファイルを提供するハンドラ
 async fn static_handler(uri: Uri) -> impl IntoResponse {
     let path = uri.path().trim_start_matches('/');
-    
+
     // ルートパスの場合はindex.htmlを提供
     let path = if path.is_empty() || path == "/" {
         "index.html"
@@ -84,7 +84,7 @@ async fn static_handler(uri: Uri) -> impl IntoResponse {
     match WebAssets::get(path) {
         Some(content) => {
             let mime = mime_guess::from_path(path).first_or_octet_stream();
-            
+
             Response::builder()
                 .status(StatusCode::OK)
                 .header(header::CONTENT_TYPE, mime.as_ref())

@@ -12,7 +12,15 @@ impl LinuxBoardDetector {
     pub fn new() -> Self {
         Self
     }
+}
 
+impl Default for LinuxBoardDetector {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl LinuxBoardDetector {
     async fn read_cpu_info(&self) -> Result<(String, String), HardwareError> {
         let cpu_info = fs::read_to_string("/proc/cpuinfo").await.map_err(|e| {
             HardwareError::FileOperationFailed(format!("Failed to read /proc/cpuinfo: {}", e))
@@ -63,13 +71,7 @@ impl LinuxBoardDetector {
         let udc_path = Path::new("/sys/class/udc");
         let udc_available = if udc_path.exists() {
             match fs::read_dir(udc_path).await {
-                Ok(mut entries) => {
-                    if entries.next_entry().await.is_ok() {
-                        true
-                    } else {
-                        false
-                    }
-                }
+                Ok(mut entries) => entries.next_entry().await.is_ok(),
                 Err(_) => false,
             }
         } else {
@@ -117,7 +119,7 @@ impl BoardRepository for LinuxBoardDetector {
         info!("Loading kernel module: {}", module_name);
 
         let output = Command::new("sudo")
-            .args(&["modprobe", module_name])
+            .args(["modprobe", module_name])
             .output()
             .await
             .map_err(|e| {

@@ -303,15 +303,15 @@ impl HidReport {
         }
 
         // Left stick data (3 bytes, 12-bit values)
-        let lx = ((self.left_stick.x as u16) * 4095 / 255) as u16;
-        let ly = ((self.left_stick.y as u16) * 4095 / 255) as u16;
+        let lx = (self.left_stick.x as u16) * 4095 / 255;
+        let ly = (self.left_stick.y as u16) * 4095 / 255;
         report[6] = lx as u8;
         report[7] = ((lx >> 8) & 0x0F) as u8 | ((ly & 0x0F) << 4) as u8;
         report[8] = (ly >> 4) as u8;
 
         // Right stick data (3 bytes, 12-bit values)
-        let rx = ((self.right_stick.x as u16) * 4095 / 255) as u16;
-        let ry = ((self.right_stick.y as u16) * 4095 / 255) as u16;
+        let rx = (self.right_stick.x as u16) * 4095 / 255;
+        let ry = (self.right_stick.y as u16) * 4095 / 255;
         report[9] = rx as u8;
         report[10] = ((rx >> 8) & 0x0F) as u8 | ((ry & 0x0F) << 4) as u8;
         report[11] = (ry >> 4) as u8;
