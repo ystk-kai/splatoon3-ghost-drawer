@@ -31,14 +31,124 @@ impl LinuxSystemdManager {
                 SetupError::SystemdServiceFailed(format!("Failed to get executable path: {e}"))
             })
     }
+
+    fn create_splatoon3_user(&self) -> Result<(), SetupError> {
+        info!("Creating dedicated splatoon3 user...");
+
+        // Check if user already exists
+        let check_output = Command::new("id")
+            .arg("splatoon3")
+            .output();
+
+        if let Ok(output) = check_output {
+            if output.status.success() {
+                info!("User 'splatoon3' already exists");
+                return Ok(());
+            }
+        }
+
+        // Create system user
+        let output = Command::new("useradd")
+            .arg("--system")
+            .arg("--no-create-home")
+            .arg("--shell")
+            .arg("/usr/sbin/nologin")
+            .arg("--comment")
+            .arg("Splatoon3 Ghost Drawer Service User")
+            .arg("splatoon3")
+            .output()
+            .map_err(|e| {
+                SetupError::SystemdServiceFailed(format!("Failed to create user: {e}"))
+            })?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(SetupError::SystemdServiceFailed(format!(
+                "Failed to create splatoon3 user: {stderr}"
+            )));
+        }
+
+        // Add user to input group for HID device access
+        let output = Command::new("usermod")
+            .arg("-a")
+            .arg("-G")
+            .arg("input")
+            .arg("splatoon3")
+            .output()
+            .map_err(|e| {
+                SetupError::SystemdServiceFailed(format!("Failed to add user to input group: {e}"))
+            })?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(SetupError::SystemdServiceFailed(format!(
+                "Failed to add splatoon3 user to input group: {stderr}"
+            )));
+        }
+
+        info!("Created splatoon3 user and added to input group");
+        Ok(())
+    }
+
+    fn setup_hid_device_permissions(&self) -> Result<(), SetupError> {
+        info!("Setting up HID device permissions...");
+
+        // Create udev rule for HID device permissions
+        let udev_rule_content = r#"# Splatoon3 Ghost Drawer HID Device Permissions
+# Give splatoon3 user access to HID gadget devices
+SUBSYSTEM=="hidg", GROUP="splatoon3", MODE="0664"
+KERNEL=="hidg*", GROUP="splatoon3", MODE="0664"
+
+# Also ensure input group access
+SUBSYSTEM=="input", GROUP="input", MODE="0664"
+KERNEL=="event*", GROUP="input", MODE="0664"
+"#;
+
+        let udev_rule_path = "/etc/udev/rules.d/99-splatoon3-hid.rules";
+        fs::write(udev_rule_path, udev_rule_content)
+            .map_err(|e| SetupError::SystemdServiceFailed(format!("Failed to create udev rule: {e}")))?;
+
+        info!("Created udev rule at {}", udev_rule_path);
+
+        // Create systemd-tmpfiles rule for runtime permissions
+        let tmpfiles_content = r#"# Splatoon3 Ghost Drawer Runtime Permissions
+d /dev/hidg0 0664 root splatoon3 -
+d /dev/hidg1 0664 root splatoon3 -
+d /dev/hidg2 0664 root splatoon3 -
+d /dev/hidg3 0664 root splatoon3 -
+"#;
+
+        let tmpfiles_path = "/etc/tmpfiles.d/splatoon3-hid.conf";
+        fs::write(tmpfiles_path, tmpfiles_content)
+            .map_err(|e| SetupError::SystemdServiceFailed(format!("Failed to create tmpfiles rule: {e}")))?;
+
+        info!("Created tmpfiles rule at {}", tmpfiles_path);
+
+        // Reload udev rules
+        let output = Command::new("udevadm")
+            .arg("control")
+            .arg("--reload-rules")
+            .output();
+
+        if let Ok(output) = output {
+            if output.status.success() {
+                info!("Reloaded udev rules");
+            } else {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                info!("Failed to reload udev rules (non-critical): {}", stderr);
+            }
+        }
+
+        Ok(())
+    }
 }
 
 impl SystemdServiceManager for LinuxSystemdManager {
     fn create_gadget_service(&self) -> Result<(), SetupError> {
         info!("Creating systemd service file...");
 
-        // Use the path where the binary will be installed
-        let executable_path = "/opt/splatoon3-ghost-drawer/splatoon3-ghost-drawer".to_string();
+        // Get the current executable path dynamically
+        let executable_path = Self::get_executable_path()?;
 
         let service_content = format!(
             r#"[Unit]
@@ -139,8 +249,14 @@ WantedBy=sysinit.target
     fn create_web_service(&self) -> Result<(), SetupError> {
         info!("Creating web UI systemd service file...");
 
-        // Use the path where the binary will be installed
-        let executable_path = "/opt/splatoon3-ghost-drawer/splatoon3-ghost-drawer".to_string();
+        // Create dedicated user for web service
+        self.create_splatoon3_user()?;
+
+        // Setup HID device permissions
+        self.setup_hid_device_permissions()?;
+
+        // Get the current executable path dynamically
+        let executable_path = Self::get_executable_path()?;
 
         let service_content = format!(
             r#"[Unit]
@@ -154,11 +270,14 @@ Type=simple
 ExecStart={executable_path} run
 Restart=on-failure
 RestartSec=10
-User=root
+User=splatoon3
+Group=splatoon3
 Environment="RUST_LOG=info"
 StandardOutput=journal
 StandardError=journal
 TimeoutStartSec=60s
+# Grant access to HID devices
+SupplementaryGroups=input
 
 [Install]
 WantedBy=multi-user.target

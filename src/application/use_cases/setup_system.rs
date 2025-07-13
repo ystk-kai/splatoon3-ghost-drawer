@@ -75,9 +75,47 @@ impl SetupSystemUseCase {
         self.systemd_manager.enable_web_service()?;
         info!("Web UI systemd service enabled.");
 
-        info!("System setup completed successfully!");
-        info!("Please reboot the device for changes to take effect.");
+        // Try to start services immediately for testing
+        info!("Attempting to start services for immediate testing...");
+        if let Err(e) = self.try_start_services() {
+            info!("Could not start services immediately (this is normal): {}", e);
+            info!("Services will start automatically after reboot.");
+        } else {
+            info!("Services started successfully! You can test the system without rebooting.");
+        }
 
+        info!("System setup completed successfully!");
+        info!("For full functionality, please reboot the device: sudo reboot");
+
+        Ok(())
+    }
+
+    fn try_start_services(&self) -> Result<(), SetupError> {
+        // Try to start the gadget service
+        let output = std::process::Command::new("systemctl")
+            .arg("start")
+            .arg("splatoon3-gadget.service")
+            .output()
+            .map_err(|e| SetupError::Unknown(format!("Failed to start gadget service: {}", e)))?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(SetupError::Unknown(format!("Gadget service failed to start: {}", stderr)));
+        }
+
+        // Try to start the web service
+        let output = std::process::Command::new("systemctl")
+            .arg("start")
+            .arg("splatoon3-ghost-drawer.service")
+            .output()
+            .map_err(|e| SetupError::Unknown(format!("Failed to start web service: {}", e)))?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(SetupError::Unknown(format!("Web service failed to start: {}", stderr)));
+        }
+
+        info!("Both services started successfully!");
         Ok(())
     }
 }

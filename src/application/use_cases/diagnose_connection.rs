@@ -24,19 +24,31 @@ impl DiagnoseConnectionUseCase {
         println!("🔍 Connection Diagnostics");
         println!("=======================\n");
 
-        // 1. カーネルモジュールの確認
+        // 1. システム情報の確認
+        self.check_system_info()?;
+
+        // 2. ブート設定の確認
+        self.check_boot_configuration()?;
+
+        // 3. カーネルモジュールの確認
         self.check_kernel_modules()?;
 
-        // 2. USB Gadgetの設定確認
+        // 4. UDC（USB Device Controller）の確認
+        self.check_udc_status()?;
+
+        // 5. USB Gadgetの設定確認
         self.check_gadget_configuration()?;
 
-        // 3. HIDデバイスの確認
+        // 6. HIDデバイスの確認
         self.check_hid_devices()?;
 
-        // 4. USB OTGモードの確認
+        // 7. USB OTGモードの確認
         self.check_otg_mode()?;
 
-        // 5. USB接続の確認
+        // 8. サービス状態の確認
+        self.check_service_status()?;
+
+        // 9. USB接続の確認
         self.check_usb_connection()?;
 
         // 5. dmesgログの確認
@@ -242,6 +254,166 @@ impl DiagnoseConnectionUseCase {
             println!("   📊 Gadget state: {}", state.trim());
         }
 
+        println!();
+        Ok(())
+    }
+
+    fn check_system_info(&self) -> Result<(), HardwareError> {
+        println!("🖥️ System Information:");
+        
+        // Check board model
+        if let Ok(model) = fs::read_to_string("/proc/device-tree/model") {
+            println!("   Board Model: {}", model.trim_end_matches('\0'));
+        }
+        
+        // Check kernel version
+        if let Ok(version) = fs::read_to_string("/proc/version") {
+            let kernel_line = version.lines().next().unwrap_or("Unknown");
+            println!("   Kernel: {}", kernel_line);
+        }
+        
+        // Check if running as root
+        let is_root = unsafe { libc::geteuid() == 0 };
+        println!("   Running as root: {}", if is_root { "✅ Yes" } else { "❌ No" });
+        
+        println!();
+        Ok(())
+    }
+
+    fn check_boot_configuration(&self) -> Result<(), HardwareError> {
+        println!("🔧 Boot Configuration:");
+        
+        // Check config.txt files
+        let config_files = vec!["/boot/firmware/config.txt", "/boot/config.txt"];
+        let mut found_config = false;
+        
+        for config_file in &config_files {
+            if Path::new(config_file).exists() {
+                found_config = true;
+                println!("   Config file: {} ✅", config_file);
+                
+                if let Ok(content) = fs::read_to_string(config_file) {
+                    let has_dwc2 = content.lines().any(|line| {
+                        let trimmed = line.trim();
+                        trimmed == "dtoverlay=dwc2" && !trimmed.starts_with('#')
+                    });
+                    
+                    println!("   dtoverlay=dwc2: {}", if has_dwc2 { "✅ Found" } else { "❌ Missing" });
+                    
+                    // Check for conflicting configurations
+                    let has_dwc2_host = content.contains("dtoverlay=dwc2,dr_mode=host");
+                    if has_dwc2_host {
+                        println!("   ⚠️  Found conflicting dwc2 host mode configuration");
+                    }
+                }
+                break;
+            }
+        }
+        
+        if !found_config {
+            println!("   Config file: ❌ Not found");
+        }
+        
+        // Check /etc/modules
+        if Path::new("/etc/modules").exists() {
+            if let Ok(content) = fs::read_to_string("/etc/modules") {
+                let has_dwc2 = content.lines().any(|line| line.trim() == "dwc2");
+                let has_libcomposite = content.lines().any(|line| line.trim() == "libcomposite");
+                
+                println!("   /etc/modules dwc2: {}", if has_dwc2 { "✅ Found" } else { "❌ Missing" });
+                println!("   /etc/modules libcomposite: {}", if has_libcomposite { "✅ Found" } else { "❌ Missing" });
+            }
+        }
+        
+        // Check blacklist
+        let blacklist_file = "/etc/modprobe.d/blacklist-dwc_otg.conf";
+        let blacklist_exists = Path::new(blacklist_file).exists();
+        println!("   dwc_otg blacklisted: {}", if blacklist_exists { "✅ Yes" } else { "❌ No" });
+        
+        println!();
+        Ok(())
+    }
+
+    fn check_udc_status(&self) -> Result<(), HardwareError> {
+        println!("🔌 USB Device Controller (UDC):");
+        
+        let udc_dir = "/sys/class/udc";
+        if !Path::new(udc_dir).exists() {
+            println!("   UDC directory: ❌ Not found");
+            println!("   This indicates USB OTG is not enabled or dwc2 is not loaded");
+            println!();
+            return Ok(());
+        }
+        
+        println!("   UDC directory: ✅ Found");
+        
+        // List available UDCs
+        if let Ok(entries) = fs::read_dir(udc_dir) {
+            let udcs: Vec<_> = entries
+                .filter_map(|entry| entry.ok())
+                .map(|entry| entry.file_name().to_string_lossy().to_string())
+                .collect();
+            
+            if udcs.is_empty() {
+                println!("   Available UDCs: ❌ None found");
+                println!("   Check if dwc2 module is loaded with correct parameters");
+            } else {
+                println!("   Available UDCs: ✅ {}", udcs.join(", "));
+            }
+        }
+        
+        println!();
+        Ok(())
+    }
+
+    fn check_service_status(&self) -> Result<(), HardwareError> {
+        println!("🔄 Service Status:");
+        
+        let services = vec![
+            ("splatoon3-gadget.service", "USB Gadget Configuration"),
+            ("splatoon3-ghost-drawer.service", "Web UI Service"),
+        ];
+        
+        for (service_name, description) in services {
+            if let Ok(output) = Command::new("systemctl")
+                .arg("is-active")
+                .arg(service_name)
+                .output()
+            {
+                let status = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                let status_icon = match status.as_str() {
+                    "active" => "✅",
+                    "inactive" => "⏸️",
+                    "failed" => "❌",
+                    _ => "❓",
+                };
+                
+                println!("   {} ({}): {} {}", service_name, description, status_icon, status);
+                
+                // If failed, show recent logs
+                if status == "failed" {
+                    if let Ok(log_output) = Command::new("journalctl")
+                        .arg("-u")
+                        .arg(service_name)
+                        .arg("--no-pager")
+                        .arg("-n")
+                        .arg("3")
+                        .output()
+                    {
+                        let logs = String::from_utf8_lossy(&log_output.stdout);
+                        if !logs.trim().is_empty() {
+                            println!("     Recent logs:");
+                            for line in logs.lines().take(3) {
+                                println!("       {}", line);
+                            }
+                        }
+                    }
+                }
+            } else {
+                println!("   {} ({}): ❓ Unknown", service_name, description);
+            }
+        }
+        
         println!();
         Ok(())
     }
