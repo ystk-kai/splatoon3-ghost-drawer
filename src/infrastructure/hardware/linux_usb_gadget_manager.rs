@@ -86,9 +86,7 @@ impl LinuxUsbGadgetManager {
 
             // Raspberry Pi Zero 2W specific: check device tree overlay is loaded
             info!("Checking device tree overlays for Raspberry Pi Zero 2W...");
-            let overlay_cmd = Command::new("ls")
-                .arg("/boot/firmware/overlays/")
-                .output();
+            let overlay_cmd = Command::new("ls").arg("/boot/firmware/overlays/").output();
 
             if let Ok(output) = overlay_cmd {
                 let overlays = String::from_utf8_lossy(&output.stdout);

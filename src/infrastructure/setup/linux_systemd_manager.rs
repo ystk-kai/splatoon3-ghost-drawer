@@ -36,9 +36,7 @@ impl LinuxSystemdManager {
         info!("Creating dedicated splatoon3 user...");
 
         // Check if user already exists
-        let check_output = Command::new("id")
-            .arg("splatoon3")
-            .output();
+        let check_output = Command::new("id").arg("splatoon3").output();
 
         if let Ok(output) = check_output {
             if output.status.success() {
@@ -57,9 +55,7 @@ impl LinuxSystemdManager {
             .arg("Splatoon3 Ghost Drawer Service User")
             .arg("splatoon3")
             .output()
-            .map_err(|e| {
-                SetupError::SystemdServiceFailed(format!("Failed to create user: {e}"))
-            })?;
+            .map_err(|e| SetupError::SystemdServiceFailed(format!("Failed to create user: {e}")))?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -105,8 +101,9 @@ KERNEL=="event*", GROUP="input", MODE="0664"
 "#;
 
         let udev_rule_path = "/etc/udev/rules.d/99-splatoon3-hid.rules";
-        fs::write(udev_rule_path, udev_rule_content)
-            .map_err(|e| SetupError::SystemdServiceFailed(format!("Failed to create udev rule: {e}")))?;
+        fs::write(udev_rule_path, udev_rule_content).map_err(|e| {
+            SetupError::SystemdServiceFailed(format!("Failed to create udev rule: {e}"))
+        })?;
 
         info!("Created udev rule at {}", udev_rule_path);
 
@@ -119,8 +116,9 @@ d /dev/hidg3 0664 root splatoon3 -
 "#;
 
         let tmpfiles_path = "/etc/tmpfiles.d/splatoon3-hid.conf";
-        fs::write(tmpfiles_path, tmpfiles_content)
-            .map_err(|e| SetupError::SystemdServiceFailed(format!("Failed to create tmpfiles rule: {e}")))?;
+        fs::write(tmpfiles_path, tmpfiles_content).map_err(|e| {
+            SetupError::SystemdServiceFailed(format!("Failed to create tmpfiles rule: {e}"))
+        })?;
 
         info!("Created tmpfiles rule at {}", tmpfiles_path);
 
