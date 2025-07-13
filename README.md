@@ -34,15 +34,26 @@ USB OTG (On-The-Go) 機能をサポートするLinuxボードが必要です：
 
 #### 方法A: リリース版のインストール（推奨）
 
+最新のリリース版は[GitHub Releases](https://github.com/ystk-kai/splatoon3-ghost-drawer/releases)からダウンロードできます。
+
 ```bash
-# 最新リリースをダウンロード（例: v0.1.0）
-wget https://github.com/ystk-kai/splatoon3-ghost-drawer/releases/download/v0.1.0/splatoon3-ghost-drawer-linux-arm64.tar.gz
-tar -xzf splatoon3-ghost-drawer-linux-arm64.tar.gz
+# お使いのアーキテクチャに合わせてダウンロード
+
+# Raspberry Pi Zero 2W / Orange Pi Zero 2W の場合（ARM64）
+wget https://github.com/ystk-kai/splatoon3-ghost-drawer/releases/latest/download/splatoon3-ghost-drawer-Linux-aarch64.tar.gz
+tar -xzf splatoon3-ghost-drawer-Linux-aarch64.tar.gz
+
+# WSL2 Ubuntu / 通常のLinux の場合（x86_64）
+wget https://github.com/ystk-kai/splatoon3-ghost-drawer/releases/latest/download/splatoon3-ghost-drawer-Linux-x86_64.tar.gz
+tar -xzf splatoon3-ghost-drawer-Linux-x86_64.tar.gz
 
 # システムにインストール
-sudo cp splatoon3-ghost-drawer /usr/local/bin/
+sudo cp splatoon3-ghost-drawer-Linux-* /usr/local/bin/splatoon3-ghost-drawer
 sudo chmod +x /usr/local/bin/splatoon3-ghost-drawer
 ```
+
+> **最新のビルド版を使用したい場合**:  
+> CI/CDで自動ビルドされた最新版は[GitHub Actions](https://github.com/ystk-kai/splatoon3-ghost-drawer/actions/workflows/build.yml)から「latest-builds」アーティファクトとしてダウンロードできます（GitHubログインが必要）。
 
 #### 方法B: ソースからビルド
 

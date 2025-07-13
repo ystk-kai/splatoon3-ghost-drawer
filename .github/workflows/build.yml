@@ -1,0 +1,100 @@
+name: Build
+
+on:
+  push:
+    branches: [ master, main ]
+  pull_request:
+    branches: [ master, main ]
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        
+      - name: Cache dependencies
+        uses: Swatinem/rust-cache@v2
+        
+      - name: Run tests
+        run: cargo test --verbose
+        
+      - name: Check
+        run: cargo check --verbose
+        
+      - name: Clippy
+        run: cargo clippy -- -D warnings
+
+  build:
+    name: Build - ${{ matrix.target }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os-name: Linux-x86_64
+          - target: aarch64-unknown-linux-gnu
+            os-name: Linux-aarch64
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        
+      - name: Build with Cross
+        uses: houseabsolute/actions-rust-cross@v0
+        with:
+          target: ${{ matrix.target }}
+          args: --release --verbose
+          
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: splatoon3-ghost-drawer-${{ matrix.os-name }}
+          path: target/${{ matrix.target }}/release/splatoon3-ghost-drawer
+          retention-days: 7
+          
+  latest-build:
+    name: Upload Latest Build
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main'
+    
+    steps:
+      - uses: actions/checkout@v4
+        
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+          
+      - name: Display structure
+        run: ls -la artifacts/
+        
+      - name: Prepare binaries
+        run: |
+          mkdir -p binaries
+          cp artifacts/splatoon3-ghost-drawer-Linux-x86_64/splatoon3-ghost-drawer binaries/splatoon3-ghost-drawer-x86_64
+          cp artifacts/splatoon3-ghost-drawer-Linux-aarch64/splatoon3-ghost-drawer binaries/splatoon3-ghost-drawer-aarch64
+          chmod +x binaries/*
+          
+      - name: Create SHA256 checksums
+        run: |
+          cd binaries
+          sha256sum * > checksums.txt
+          cat checksums.txt
+          
+      - name: Upload latest builds
+        uses: actions/upload-artifact@v4
+        with:
+          name: latest-builds
+          path: binaries/*
+          retention-days: 30
