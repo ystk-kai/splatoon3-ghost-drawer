@@ -108,16 +108,23 @@ impl LinuxBootConfigurator {
     }
 
     fn configure_raspberry_pi(&self, _board: &BoardModel) -> Result<(), SetupError> {
-        let config_file = "/boot/config.txt";
-
-        if !Path::new(config_file).exists() {
-            return Err(SetupError::BootConfigurationFailed(
-                "config.txt not found".to_string(),
-            ));
+        // Check both possible locations for config.txt
+        let config_files = vec!["/boot/firmware/config.txt", "/boot/config.txt"];
+        let mut config_file = None;
+        
+        for file in &config_files {
+            if Path::new(file).exists() {
+                config_file = Some(*file);
+                break;
+            }
         }
+        
+        let config_path = config_file.ok_or_else(|| {
+            SetupError::BootConfigurationFailed("config.txt not found in /boot or /boot/firmware".to_string())
+        })?;
 
         // Read existing configuration
-        let content = fs::read_to_string(config_file)?;
+        let content = fs::read_to_string(config_path)?;
         let lines: Vec<String> = content.lines().map(|s| s.to_string()).collect();
 
         // Check if dtoverlay=dwc2 is already present
@@ -125,29 +132,29 @@ impl LinuxBootConfigurator {
 
         if !has_dwc2 {
             // Append the configuration
-            let mut file = fs::OpenOptions::new().append(true).open(config_file)?;
+            let mut file = fs::OpenOptions::new().append(true).open(config_path)?;
 
             writeln!(file, "\n# Enable USB OTG mode for gadget")?;
             writeln!(file, "dtoverlay=dwc2")?;
-            info!("Added dtoverlay=dwc2 to {}", config_file);
+            info!("Added dtoverlay=dwc2 to {}", config_path);
         }
 
-        // Check /boot/cmdline.txt for modules-load=dwc2
-        let cmdline_file = "/boot/cmdline.txt";
-        if Path::new(cmdline_file).exists() {
-            let cmdline = fs::read_to_string(cmdline_file)?;
-
-            if !cmdline.contains("modules-load=dwc2") {
-                // Insert after rootwait
-                let new_cmdline = if cmdline.contains("rootwait") {
-                    cmdline.replace("rootwait", "rootwait modules-load=dwc2")
-                } else {
-                    format!("{} modules-load=dwc2", cmdline.trim())
-                };
-
-                fs::write(cmdline_file, new_cmdline)?;
-                info!("Added modules-load=dwc2 to {}", cmdline_file);
+        // Add dwc2 to /etc/modules
+        let modules_file = "/etc/modules";
+        if Path::new(modules_file).exists() {
+            let modules_content = fs::read_to_string(modules_file)?;
+            if !modules_content.lines().any(|line| line.trim() == "dwc2") {
+                let mut file = fs::OpenOptions::new().append(true).open(modules_file)?;
+                writeln!(file, "dwc2")?;
+                info!("Added dwc2 to /etc/modules");
             }
+        }
+
+        // Blacklist dwc_otg to prevent conflicts
+        let blacklist_file = "/etc/modprobe.d/blacklist-dwc_otg.conf";
+        if !Path::new(blacklist_file).exists() {
+            fs::write(blacklist_file, "blacklist dwc_otg\n")?;
+            info!("Created {} to blacklist dwc_otg", blacklist_file);
         }
 
         Ok(())
@@ -186,13 +193,21 @@ impl BootConfigurator for LinuxBootConfigurator {
                 Ok(false)
             }
             BoardModel::RaspberryPiZero | BoardModel::RaspberryPiZero2W => {
-                let config_file = "/boot/config.txt";
-                if !Path::new(config_file).exists() {
-                    return Ok(false);
+                // Check both possible locations for config.txt
+                let config_files = vec!["/boot/firmware/config.txt", "/boot/config.txt"];
+                
+                for config_file in config_files {
+                    if Path::new(config_file).exists() {
+                        let content = fs::read_to_string(config_file)?;
+                        if content.contains("dtoverlay=dwc2") {
+                            // Also check if dwc_otg is blacklisted
+                            let blacklist_exists = Path::new("/etc/modprobe.d/blacklist-dwc_otg.conf").exists();
+                            return Ok(blacklist_exists);
+                        }
+                    }
                 }
-
-                let content = fs::read_to_string(config_file)?;
-                Ok(content.contains("dtoverlay=dwc2"))
+                
+                Ok(false)
             }
             BoardModel::Unknown(_) => Ok(false),
         }
@@ -258,47 +273,56 @@ impl BootConfigurator for LinuxBootConfigurator {
                 Ok(())
             }
             BoardModel::RaspberryPiZero | BoardModel::RaspberryPiZero2W => {
-                let config_file = "/boot/config.txt";
-                if !Path::new(config_file).exists() {
-                    return Ok(());
-                }
+                // Check both possible locations for config.txt
+                let config_files = vec!["/boot/firmware/config.txt", "/boot/config.txt"];
+                
+                for config_file in config_files {
+                    if !Path::new(config_file).exists() {
+                        continue;
+                    }
 
-                let content = fs::read_to_string(config_file)?;
-                let lines: Vec<String> = content.lines().map(|s| s.to_string()).collect();
-                let mut new_lines = Vec::new();
-                let mut skip_next = false;
+                    let content = fs::read_to_string(config_file)?;
+                    let lines: Vec<String> = content.lines().map(|s| s.to_string()).collect();
+                    let mut new_lines = Vec::new();
+                    let mut skip_next = false;
 
-                for line in lines {
-                    if skip_next && line.trim().is_empty() {
+                    for line in lines {
+                        if skip_next && line.trim().is_empty() {
+                            skip_next = false;
+                            continue;
+                        }
                         skip_next = false;
-                        continue;
-                    }
-                    skip_next = false;
 
-                    if line.trim() == "dtoverlay=dwc2" {
-                        skip_next = true;
-                        continue;
+                        if line.trim() == "dtoverlay=dwc2" {
+                            skip_next = true;
+                            continue;
+                        }
+                        if line.contains("Enable USB OTG mode for gadget") {
+                            continue;
+                        }
+                        new_lines.push(line);
                     }
-                    if line.contains("Enable USB OTG mode for gadget") {
-                        continue;
-                    }
-                    new_lines.push(line);
+
+                    fs::write(config_file, new_lines.join("\n"))?;
+                    info!("Removed dtoverlay=dwc2 from {}", config_file);
                 }
 
-                fs::write(config_file, new_lines.join("\n"))?;
-                info!("Removed dtoverlay=dwc2 from {}", config_file);
+                // Remove dwc2 from /etc/modules
+                let modules_file = "/etc/modules";
+                if Path::new(modules_file).exists() {
+                    let content = fs::read_to_string(modules_file)?;
+                    let lines: Vec<&str> = content.lines()
+                        .filter(|line| line.trim() != "dwc2")
+                        .collect();
+                    fs::write(modules_file, lines.join("\n"))?;
+                    info!("Removed dwc2 from /etc/modules");
+                }
 
-                // Remove modules-load=dwc2 from cmdline.txt
-                let cmdline_file = "/boot/cmdline.txt";
-                if Path::new(cmdline_file).exists() {
-                    let cmdline = fs::read_to_string(cmdline_file)?;
-                    if cmdline.contains("modules-load=dwc2") {
-                        let new_cmdline = cmdline
-                            .replace(" modules-load=dwc2", "")
-                            .replace("modules-load=dwc2 ", "");
-                        fs::write(cmdline_file, new_cmdline)?;
-                        info!("Removed modules-load=dwc2 from {}", cmdline_file);
-                    }
+                // Remove blacklist file
+                let blacklist_file = "/etc/modprobe.d/blacklist-dwc_otg.conf";
+                if Path::new(blacklist_file).exists() {
+                    fs::remove_file(blacklist_file)?;
+                    info!("Removed {}", blacklist_file);
                 }
 
                 Ok(())

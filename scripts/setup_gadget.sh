@@ -90,9 +90,32 @@ setup_gadget_modules() {
             ;;
         "raspberry_pi_zero_2w"|"raspberry_pi_zero")
             # Raspberry Pi Zero固有の設定
-            if ! grep -q "dtoverlay=dwc2" /boot/config.txt; then
-                echo "dtoverlay=dwc2" | sudo tee -a /boot/config.txt >/dev/null
-                print_info "Raspberry Pi Zero: USB OTG設定を追加しました"
+            # 新しいファイル構造に対応
+            local config_file="/boot/config.txt"
+            local firmware_config="/boot/firmware/config.txt"
+            local cmdline_file="/boot/firmware/cmdline.txt"
+            
+            # /boot/firmware/config.txtが存在する場合はそちらを使用
+            if [ -f "$firmware_config" ]; then
+                config_file="$firmware_config"
+            fi
+            
+            # dtoverlay=dwc2の設定
+            if ! grep -q "dtoverlay=dwc2" "$config_file"; then
+                echo -e "\n# Enable USB gadget mode\ndtoverlay=dwc2" | sudo tee -a "$config_file" >/dev/null
+                print_info "Raspberry Pi Zero: USB OTG設定を追加しました ($config_file)"
+            fi
+            
+            # dwc_otgをブラックリストに追加
+            if [ ! -f "/etc/modprobe.d/blacklist-dwc_otg.conf" ]; then
+                echo "blacklist dwc_otg" | sudo tee /etc/modprobe.d/blacklist-dwc_otg.conf >/dev/null
+                print_info "dwc_otgをブラックリストに追加しました"
+            fi
+            
+            # /etc/modulesにdwc2が含まれていることを確認
+            if ! grep -q "^dwc2$" /etc/modules; then
+                echo "dwc2" | sudo tee -a /etc/modules >/dev/null
+                print_info "/etc/modulesにdwc2を追加しました"
             fi
             ;;
     esac
