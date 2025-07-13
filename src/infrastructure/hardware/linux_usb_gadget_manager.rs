@@ -67,11 +67,11 @@ impl LinuxUsbGadgetManager {
         if !Path::new(udc_dir).exists() {
             error!("UDC directory does not exist: {}", udc_dir);
 
-            // Try to load the necessary modules for Orange Pi Zero 2W
+            // Try to load the necessary modules for Raspberry Pi Zero 2W
             info!("Attempting to load USB gadget modules...");
 
-            // For Orange Pi Zero 2W with Allwinner H616
-            let modules = vec!["sunxi", "musb_hdrc", "usb_f_hid"];
+            // For Raspberry Pi Zero 2W with BCM2710A1
+            let modules = vec!["dwc2", "libcomposite", "usb_f_hid"];
             for module in modules {
                 info!("Loading module: {}", module);
                 let output = Command::new("modprobe").arg(module).output();
@@ -84,16 +84,16 @@ impl LinuxUsbGadgetManager {
                 }
             }
 
-            // Orange Pi Zero 2W specific: enable USB OTG in device tree if needed
-            info!("Checking device tree overlays for Orange Pi Zero 2W...");
+            // Raspberry Pi Zero 2W specific: check device tree overlay is loaded
+            info!("Checking device tree overlays for Raspberry Pi Zero 2W...");
             let overlay_cmd = Command::new("ls")
-                .arg("/boot/dtb/allwinner/overlay/")
+                .arg("/boot/firmware/overlays/")
                 .output();
 
             if let Ok(output) = overlay_cmd {
                 let overlays = String::from_utf8_lossy(&output.stdout);
-                if overlays.contains("usb-otg") || overlays.contains("usb_otg") {
-                    info!("USB OTG overlay available");
+                if overlays.contains("dwc2") {
+                    info!("dwc2 overlay available");
                 }
             }
 
@@ -123,9 +123,9 @@ impl LinuxUsbGadgetManager {
             if !name.is_empty() {
                 info!("Found UDC: {}", name);
 
-                // For Orange Pi Zero 2W, the UDC is typically musb-hdrc.x.auto
-                if name.contains("musb-hdrc") {
-                    info!("Using Orange Pi Zero 2W UDC: {}", name);
+                // For Raspberry Pi Zero 2W, the UDC is typically dwc2 based
+                if name.contains("dwc2") || name.contains("fe980000.usb") {
+                    info!("Using Raspberry Pi Zero 2W UDC: {}", name);
                     return Ok(name);
                 }
 
