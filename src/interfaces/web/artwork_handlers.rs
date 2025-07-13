@@ -156,9 +156,7 @@ pub async fn create_artwork(
             );
             return Err(ErrorResponse::new(
                 StatusCode::UNPROCESSABLE_ENTITY,
-                format!(
-                    "Dot at index {index} has coordinates outside canvas bounds"
-                ),
+                format!("Dot at index {index} has coordinates outside canvas bounds"),
             ));
         }
 
@@ -262,9 +260,7 @@ pub async fn paint_artwork(
 
             Ok(Json(ApiResponse {
                 success: true,
-                message: format!(
-                    "Painting started (estimated time: {estimated_time} seconds)"
-                ),
+                message: format!("Painting started (estimated time: {estimated_time} seconds)"),
             }))
         }
         None => Err(StatusCode::NOT_FOUND),

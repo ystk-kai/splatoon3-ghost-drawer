@@ -116,8 +116,8 @@ impl LinuxUsbGadgetManager {
             .map_err(|e| SetupError::Unknown(format!("Failed to read UDC directory: {e}")))?;
 
         for entry in entries {
-            let entry = entry
-                .map_err(|e| SetupError::Unknown(format!("Failed to read UDC entry: {e}")))?;
+            let entry =
+                entry.map_err(|e| SetupError::Unknown(format!("Failed to read UDC entry: {e}")))?;
 
             let name = entry.file_name().to_string_lossy().to_string();
             if !name.is_empty() {

@@ -63,9 +63,9 @@ impl HidDeviceRepository for LinuxHidDeviceRepository {
             })?;
 
         // レポートを書き込む
-        file.write_all(&report_bytes).await.map_err(|e| {
-            ControllerError::HidWriteFailed(format!("Failed to write report: {e}"))
-        })?;
+        file.write_all(&report_bytes)
+            .await
+            .map_err(|e| ControllerError::HidWriteFailed(format!("Failed to write report: {e}")))?;
 
         // 確実にフラッシュする
         file.flush()
@@ -204,9 +204,9 @@ impl HidDeviceRepository for LinuxHidDeviceRepository {
             })?;
 
         // レポートを書き込む
-        file.write_all(report).await.map_err(|e| {
-            ControllerError::HidWriteFailed(format!("Failed to write report: {e}"))
-        })?;
+        file.write_all(report)
+            .await
+            .map_err(|e| ControllerError::HidWriteFailed(format!("Failed to write report: {e}")))?;
 
         // 確実にフラッシュする
         file.flush()

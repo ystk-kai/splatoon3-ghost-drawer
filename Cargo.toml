@@ -2,9 +2,7 @@
 name = "splatoon3-ghost-drawer"
 version = "0.1.0"
 edition = "2024"
-authors = ["Your Name <your.email@example.com>"]
 description = "Splatoon3 artwork posting automation system using DDD architecture"
-license = "MIT"
 
 [dependencies]
 async-trait = "0.1.88"

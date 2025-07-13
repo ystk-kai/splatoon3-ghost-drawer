@@ -172,9 +172,7 @@ WantedBy=multi-user.target
             .truncate(true)
             .open(WEB_SERVICE_FILE)
             .map_err(|e| {
-                SetupError::SystemdServiceFailed(format!(
-                    "Failed to create web service file: {e}"
-                ))
+                SetupError::SystemdServiceFailed(format!("Failed to create web service file: {e}"))
             })?;
 
         file.write_all(service_content.as_bytes()).map_err(|e| {
@@ -294,9 +292,7 @@ WantedBy=multi-user.target
         let output = Command::new("cp")
             .args([&binary_src, binary_dest.to_str().unwrap()])
             .output()
-            .map_err(|e| {
-                SetupError::SystemdServiceFailed(format!("Failed to copy binary: {e}"))
-            })?;
+            .map_err(|e| SetupError::SystemdServiceFailed(format!("Failed to copy binary: {e}")))?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);

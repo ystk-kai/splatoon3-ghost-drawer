@@ -446,9 +446,7 @@ impl ArtworkEvent {
                 )
             }
             Self::ArtworkCanvasUpdated { drawable_dots, .. } => {
-                format!(
-                    "キャンバスが更新されました（描画可能ドット: {drawable_dots}個）"
-                )
+                format!("キャンバスが更新されました（描画可能ドット: {drawable_dots}個）")
             }
             Self::ArtworkDeleted { artwork_name, .. } => {
                 format!("アートワーク「{artwork_name}」が削除されました")
@@ -464,9 +462,7 @@ impl ArtworkEvent {
                 sequence_number,
                 ..
             } => {
-                format!(
-                    "ドット #{sequence_number} を座標 {coordinates} に描画しました"
-                )
+                format!("ドット #{sequence_number} を座標 {coordinates} に描画しました")
             }
             Self::PaintingPaused {
                 completion_ratio, ..

@@ -74,9 +74,7 @@ impl LinuxUsbGadgetManager {
 
     async fn create_directory(&self, path: &str) -> Result<(), HardwareError> {
         fs::create_dir_all(path).await.map_err(|e| {
-            HardwareError::FileOperationFailed(format!(
-                "Failed to create directory {path}: {e}"
-            ))
+            HardwareError::FileOperationFailed(format!("Failed to create directory {path}: {e}"))
         })?;
         Ok(())
     }

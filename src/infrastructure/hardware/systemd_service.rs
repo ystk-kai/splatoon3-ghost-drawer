@@ -143,9 +143,7 @@ fi
             .output()
             .await
             .map_err(|e| {
-                HardwareError::SystemCommandFailed(format!(
-                    "Failed to make script executable: {e}"
-                ))
+                HardwareError::SystemCommandFailed(format!("Failed to make script executable: {e}"))
             })?;
 
         if !output.status.success() {
