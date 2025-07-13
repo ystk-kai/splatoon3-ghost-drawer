@@ -156,7 +156,7 @@ impl FromStr for ImageFormat {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Self::from_extension(s).ok_or_else(|| format!("Unsupported image format: {}", s))
+        Self::from_extension(s).ok_or_else(|| format!("Unsupported image format: {s}"))
     }
 }
 

@@ -23,7 +23,7 @@ impl Default for LinuxBoardDetector {
 impl LinuxBoardDetector {
     async fn read_cpu_info(&self) -> Result<(String, String), HardwareError> {
         let cpu_info = fs::read_to_string("/proc/cpuinfo").await.map_err(|e| {
-            HardwareError::FileOperationFailed(format!("Failed to read /proc/cpuinfo: {}", e))
+            HardwareError::FileOperationFailed(format!("Failed to read /proc/cpuinfo: {e}"))
         })?;
 
         let mut model = String::new();
@@ -123,14 +123,13 @@ impl BoardRepository for LinuxBoardDetector {
             .output()
             .await
             .map_err(|e| {
-                HardwareError::SystemCommandFailed(format!("Failed to execute modprobe: {}", e))
+                HardwareError::SystemCommandFailed(format!("Failed to execute modprobe: {e}"))
             })?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             return Err(HardwareError::KernelModuleNotLoaded(format!(
-                "{}: {}",
-                module_name, stderr
+                "{module_name}: {stderr}"
             )));
         }
 
@@ -154,7 +153,7 @@ impl BoardRepository for LinuxBoardDetector {
 
         // Read current config
         let config_content = fs::read_to_string(config_path).await.map_err(|e| {
-            HardwareError::FileOperationFailed(format!("Failed to read {}: {}", config_path, e))
+            HardwareError::FileOperationFailed(format!("Failed to read {config_path}: {e}"))
         })?;
 
         // Check if already configured
@@ -167,7 +166,7 @@ impl BoardRepository for LinuxBoardDetector {
         let new_content = format!("{}\n{}\n", config_content.trim_end(), dtoverlay);
 
         fs::write(config_path, &new_content).await.map_err(|e| {
-            HardwareError::FileOperationFailed(format!("Failed to write {}: {}", config_path, e))
+            HardwareError::FileOperationFailed(format!("Failed to write {config_path}: {e}"))
         })?;
 
         info!("Boot configuration updated. Reboot required to apply changes.");

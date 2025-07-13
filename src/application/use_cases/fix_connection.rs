@@ -58,12 +58,12 @@ impl<G: UsbGadgetManager> FixConnectionUseCase<G> {
         ];
 
         for (module, description) in modules {
-            print!("   {} ({}): ", module, description);
+            print!("   {module} ({description}): ");
 
             let output = Command::new("modprobe")
                 .arg(module)
                 .output()
-                .map_err(|e| SetupError::Unknown(format!("Failed to run modprobe: {}", e)))?;
+                .map_err(|e| SetupError::Unknown(format!("Failed to run modprobe: {e}")))?;
 
             if output.status.success() {
                 println!("✅ Loaded");
@@ -90,7 +90,7 @@ impl<G: UsbGadgetManager> FixConnectionUseCase<G> {
         let output = Command::new("systemctl")
             .args(["stop", "splatoon3-gadget.service"])
             .output()
-            .map_err(|e| SetupError::Unknown(format!("Failed to stop service: {}", e)))?;
+            .map_err(|e| SetupError::Unknown(format!("Failed to stop service: {e}")))?;
 
         if output.status.success() {
             println!("   ✅ Service stopped");
@@ -130,15 +130,14 @@ impl<G: UsbGadgetManager> FixConnectionUseCase<G> {
         let output = Command::new("systemctl")
             .args(["start", "splatoon3-gadget.service"])
             .output()
-            .map_err(|e| SetupError::Unknown(format!("Failed to start service: {}", e)))?;
+            .map_err(|e| SetupError::Unknown(format!("Failed to start service: {e}")))?;
 
         if output.status.success() {
             println!("   ✅ Service started");
         } else {
             let stderr = String::from_utf8_lossy(&output.stderr);
             return Err(SetupError::Unknown(format!(
-                "Failed to start service: {}",
-                stderr
+                "Failed to start service: {stderr}"
             )));
         }
 
@@ -161,7 +160,7 @@ impl<G: UsbGadgetManager> FixConnectionUseCase<G> {
             if let Ok(udc) = fs::read_to_string(udc_path) {
                 let udc = udc.trim();
                 if !udc.is_empty() {
-                    println!("   ✅ UDC bound to: {}", udc);
+                    println!("   ✅ UDC bound to: {udc}");
                 } else {
                     println!("   ❌ UDC not bound");
                 }
@@ -186,13 +185,13 @@ impl<G: UsbGadgetManager> FixConnectionUseCase<G> {
                                     "   ⚠️  HID device not ready (Nintendo Switch may not be connected)"
                                 );
                             } else {
-                                println!("   ❌ HID device write test failed: {}", e);
+                                println!("   ❌ HID device write test failed: {e}");
                             }
                         }
                     }
                 }
                 Err(e) => {
-                    println!("   ❌ Cannot open HID device: {}", e);
+                    println!("   ❌ Cannot open HID device: {e}");
                 }
             }
         } else {
@@ -209,7 +208,7 @@ impl<G: UsbGadgetManager> FixConnectionUseCase<G> {
         // Find musb-hdrc mode file
         let musb_pattern = "/sys/devices/platform/soc/*.usb/musb-hdrc.*.auto/mode";
         let mode_files = glob::glob(musb_pattern)
-            .map_err(|e| SetupError::Unknown(format!("Failed to glob pattern: {}", e)))?;
+            .map_err(|e| SetupError::Unknown(format!("Failed to glob pattern: {e}")))?;
 
         let mut found_mode_file = false;
 
@@ -219,7 +218,7 @@ impl<G: UsbGadgetManager> FixConnectionUseCase<G> {
             // Read current mode
             if let Ok(current_mode) = fs::read_to_string(&path) {
                 let current_mode = current_mode.trim();
-                println!("   Current mode: {}", current_mode);
+                println!("   Current mode: {current_mode}");
 
                 // Check if mode needs to be changed
                 if current_mode != "peripheral" && current_mode != "b_peripheral" {
@@ -232,7 +231,7 @@ impl<G: UsbGadgetManager> FixConnectionUseCase<G> {
                             thread::sleep(Duration::from_millis(500));
                         }
                         Err(e) => {
-                            println!("   ❌ Failed to set peripheral mode: {}", e);
+                            println!("   ❌ Failed to set peripheral mode: {e}");
                             println!("   💡 You may need to enable USB OTG in Device Tree");
                         }
                     }
@@ -260,8 +259,8 @@ impl<G: UsbGadgetManager> FixConnectionUseCase<G> {
                 if content.contains("usb-otg") {
                     println!("   ✅ usb-otg overlay is configured");
                 } else {
-                    println!("   ⚠️  usb-otg overlay not found in {}", env_file);
-                    println!("   💡 Add 'overlays=usb-otg' to {}", env_file);
+                    println!("   ⚠️  usb-otg overlay not found in {env_file}");
+                    println!("   💡 Add 'overlays=usb-otg' to {env_file}");
                 }
             }
         }

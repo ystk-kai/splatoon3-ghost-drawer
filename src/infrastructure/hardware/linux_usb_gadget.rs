@@ -33,14 +33,13 @@ impl LinuxUsbGadgetManager {
                 .output()
                 .await
                 .map_err(|e| {
-                    HardwareError::SystemCommandFailed(format!("Failed to mount configfs: {}", e))
+                    HardwareError::SystemCommandFailed(format!("Failed to mount configfs: {e}"))
                 })?;
 
             if !output.status.success() {
                 let stderr = String::from_utf8_lossy(&output.stderr);
                 return Err(HardwareError::GadgetConfigurationFailed(format!(
-                    "Failed to mount configfs: {}",
-                    stderr
+                    "Failed to mount configfs: {stderr}"
                 )));
             }
         }
@@ -50,11 +49,11 @@ impl LinuxUsbGadgetManager {
     async fn get_available_udc(&self) -> Result<String, HardwareError> {
         let udc_path = "/sys/class/udc";
         let mut entries = fs::read_dir(udc_path).await.map_err(|e| {
-            HardwareError::FileOperationFailed(format!("Failed to read UDC directory: {}", e))
+            HardwareError::FileOperationFailed(format!("Failed to read UDC directory: {e}"))
         })?;
 
         while let Some(entry) = entries.next_entry().await.map_err(|e| {
-            HardwareError::FileOperationFailed(format!("Failed to read UDC entry: {}", e))
+            HardwareError::FileOperationFailed(format!("Failed to read UDC entry: {e}"))
         })? {
             if let Ok(name) = entry.file_name().into_string() {
                 return Ok(name);
@@ -68,7 +67,7 @@ impl LinuxUsbGadgetManager {
 
     async fn write_file(&self, path: &str, content: &str) -> Result<(), HardwareError> {
         fs::write(path, content).await.map_err(|e| {
-            HardwareError::FileOperationFailed(format!("Failed to write {}: {}", path, e))
+            HardwareError::FileOperationFailed(format!("Failed to write {path}: {e}"))
         })?;
         Ok(())
     }
@@ -76,8 +75,7 @@ impl LinuxUsbGadgetManager {
     async fn create_directory(&self, path: &str) -> Result<(), HardwareError> {
         fs::create_dir_all(path).await.map_err(|e| {
             HardwareError::FileOperationFailed(format!(
-                "Failed to create directory {}: {}",
-                path, e
+                "Failed to create directory {path}: {e}"
             ))
         })?;
         Ok(())
@@ -96,43 +94,43 @@ impl UsbGadgetRepository for LinuxUsbGadgetManager {
 
         // Set USB device descriptor values
         self.write_file(
-            &format!("{}/idVendor", gadget_path),
+            &format!("{gadget_path}/idVendor"),
             &format!("0x{:04x}", gadget.descriptor.vendor_id),
         )
         .await?;
         self.write_file(
-            &format!("{}/idProduct", gadget_path),
+            &format!("{gadget_path}/idProduct"),
             &format!("0x{:04x}", gadget.descriptor.product_id),
         )
         .await?;
         self.write_file(
-            &format!("{}/bcdDevice", gadget_path),
+            &format!("{gadget_path}/bcdDevice"),
             &format!("0x{:04x}", gadget.descriptor.device_version),
         )
         .await?;
         self.write_file(
-            &format!("{}/bcdUSB", gadget_path),
+            &format!("{gadget_path}/bcdUSB"),
             &format!("0x{:04x}", gadget.descriptor.usb_version),
         )
         .await?;
 
         // Create strings directory
-        let strings_path = format!("{}/strings/0x409", gadget_path);
+        let strings_path = format!("{gadget_path}/strings/0x409");
         self.create_directory(&strings_path).await?;
 
         // Set string descriptors
         self.write_file(
-            &format!("{}/serialnumber", strings_path),
+            &format!("{strings_path}/serialnumber"),
             &gadget.descriptor.serial_number,
         )
         .await?;
         self.write_file(
-            &format!("{}/manufacturer", strings_path),
+            &format!("{strings_path}/manufacturer"),
             &gadget.descriptor.manufacturer,
         )
         .await?;
         self.write_file(
-            &format!("{}/product", strings_path),
+            &format!("{strings_path}/product"),
             &gadget.descriptor.product,
         )
         .await?;
@@ -145,32 +143,32 @@ impl UsbGadgetRepository for LinuxUsbGadgetManager {
         let gadget_path = gadget.full_path();
 
         // Create configuration
-        let config_path = format!("{}/configs/c.1", gadget_path);
+        let config_path = format!("{gadget_path}/configs/c.1");
         self.create_directory(&config_path).await?;
 
         // Set configuration descriptor
-        self.write_file(&format!("{}/MaxPower", config_path), "500")
+        self.write_file(&format!("{config_path}/MaxPower"), "500")
             .await?;
 
         // Create configuration strings
-        let config_strings_path = format!("{}/strings/0x409", config_path);
+        let config_strings_path = format!("{config_path}/strings/0x409");
         self.create_directory(&config_strings_path).await?;
         self.write_file(
-            &format!("{}/configuration", config_strings_path),
+            &format!("{config_strings_path}/configuration"),
             "Nintendo Switch Pro Controller",
         )
         .await?;
 
         // Create HID function
-        let function_path = format!("{}/functions/hid.usb0", gadget_path);
+        let function_path = format!("{gadget_path}/functions/hid.usb0");
         self.create_directory(&function_path).await?;
 
         // Configure HID function
-        self.write_file(&format!("{}/protocol", function_path), "0")
+        self.write_file(&format!("{function_path}/protocol"), "0")
             .await?;
-        self.write_file(&format!("{}/subclass", function_path), "0")
+        self.write_file(&format!("{function_path}/subclass"), "0")
             .await?;
-        self.write_file(&format!("{}/report_length", function_path), "64")
+        self.write_file(&format!("{function_path}/report_length"), "64")
             .await?;
 
         // Write HID report descriptor for Nintendo Pro Controller
@@ -209,21 +207,20 @@ impl UsbGadgetRepository for LinuxUsbGadgetManager {
             0xC0, // End Collection
         ];
 
-        let report_desc_path = format!("{}/report_desc", function_path);
+        let report_desc_path = format!("{function_path}/report_desc");
         fs::write(&report_desc_path, &report_desc)
             .await
             .map_err(|e| {
                 HardwareError::FileOperationFailed(format!(
-                    "Failed to write report descriptor: {}",
-                    e
+                    "Failed to write report descriptor: {e}"
                 ))
             })?;
 
         // Link function to configuration
-        let symlink_path = format!("{}/hid.usb0", config_path);
+        let symlink_path = format!("{config_path}/hid.usb0");
         if !Path::new(&symlink_path).exists() {
             std::os::unix::fs::symlink(&function_path, &symlink_path).map_err(|e| {
-                HardwareError::FileOperationFailed(format!("Failed to create symlink: {}", e))
+                HardwareError::FileOperationFailed(format!("Failed to create symlink: {e}"))
             })?;
         }
 
@@ -263,12 +260,11 @@ impl UsbGadgetRepository for LinuxUsbGadgetManager {
 
         if !path.exists() {
             return Err(HardwareError::GadgetConfigurationFailed(format!(
-                "Gadget {} not found",
-                gadget_id
+                "Gadget {gadget_id} not found"
             )));
         }
 
-        let udc_path = format!("{}/UDC", gadget_path);
+        let udc_path = format!("{gadget_path}/UDC");
         let udc_content = fs::read_to_string(&udc_path).await.unwrap_or_default();
         let udc_name = udc_content.trim();
 
@@ -298,11 +294,11 @@ impl UsbGadgetRepository for LinuxUsbGadgetManager {
         }
 
         // Remove symlinks
-        let config_path = format!("{}/configs/c.1", gadget_path);
-        let symlink_path = format!("{}/hid.usb0", config_path);
+        let config_path = format!("{gadget_path}/configs/c.1");
+        let symlink_path = format!("{config_path}/hid.usb0");
         if Path::new(&symlink_path).exists() {
             fs::remove_file(&symlink_path).await.map_err(|e| {
-                HardwareError::FileOperationFailed(format!("Failed to remove symlink: {}", e))
+                HardwareError::FileOperationFailed(format!("Failed to remove symlink: {e}"))
             })?;
         }
 
@@ -318,7 +314,7 @@ impl UsbGadgetRepository for LinuxUsbGadgetManager {
         for dir in dirs_to_remove {
             if Path::new(&dir).exists() {
                 fs::remove_dir(&dir).await.map_err(|e| {
-                    HardwareError::FileOperationFailed(format!("Failed to remove {}: {}", dir, e))
+                    HardwareError::FileOperationFailed(format!("Failed to remove {dir}: {e}"))
                 })?;
             }
         }

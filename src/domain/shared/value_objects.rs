@@ -47,16 +47,8 @@ impl Coordinates {
 
     /// マンハッタン距離を計算
     pub fn manhattan_distance_to(&self, other: &Coordinates) -> u32 {
-        let dx = if self.x > other.x {
-            self.x - other.x
-        } else {
-            other.x - self.x
-        };
-        let dy = if self.y > other.y {
-            self.y - other.y
-        } else {
-            other.y - self.y
-        };
+        let dx = self.x.abs_diff(other.x);
+        let dy = self.y.abs_diff(other.y);
         (dx as u32) + (dy as u32)
     }
 
@@ -370,7 +362,7 @@ impl FromStr for Color {
             "green" => Ok(Self::green()),
             "blue" => Ok(Self::blue()),
             "transparent" => Ok(Self::transparent()),
-            _ => Err(format!("Unknown color name: {}", s)),
+            _ => Err(format!("Unknown color name: {s}")),
         }
     }
 }
@@ -441,7 +433,7 @@ impl Timestamp {
         let _datetime = std::time::UNIX_EPOCH + std::time::Duration::from_secs(secs);
 
         // 簡易的なISO 8601形式（実際の実装では chrono クレートを使用することを推奨）
-        format!("{}.{:03}Z", secs, millis)
+        format!("{secs}.{millis:03}Z")
     }
 
     /// 人間が読みやすい形式で出力
@@ -449,7 +441,7 @@ impl Timestamp {
         let elapsed = self.elapsed_secs();
 
         if elapsed < 60 {
-            format!("{}秒前", elapsed)
+            format!("{elapsed}秒前")
         } else if elapsed < 3600 {
             format!("{}分前", elapsed / 60)
         } else if elapsed < 86400 {

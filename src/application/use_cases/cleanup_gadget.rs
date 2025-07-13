@@ -62,7 +62,7 @@ impl CleanupGadgetUseCase {
     }
 
     fn unbind_udc(&self, gadget_path: &str) -> Result<(), SetupError> {
-        let udc_path = format!("{}/UDC", gadget_path);
+        let udc_path = format!("{gadget_path}/UDC");
 
         if Path::new(&udc_path).exists() {
             println!("📌 Unbinding UDC...");
@@ -71,7 +71,7 @@ impl CleanupGadgetUseCase {
             if let Ok(current_udc) = fs::read_to_string(&udc_path) {
                 let current_udc = current_udc.trim();
                 if !current_udc.is_empty() {
-                    println!("   Current UDC: {}", current_udc);
+                    println!("   Current UDC: {current_udc}");
                 }
             }
 
@@ -82,7 +82,7 @@ impl CleanupGadgetUseCase {
                     thread::sleep(Duration::from_millis(500));
                 }
                 Err(e) => {
-                    println!("   ⚠️  Failed to unbind UDC: {}", e);
+                    println!("   ⚠️  Failed to unbind UDC: {e}");
                 }
             }
         } else {
@@ -93,14 +93,14 @@ impl CleanupGadgetUseCase {
     }
 
     fn remove_function_links(&self, gadget_path: &str) -> Result<(), SetupError> {
-        let link_path = format!("{}/configs/c.1/hid.usb0", gadget_path);
+        let link_path = format!("{gadget_path}/configs/c.1/hid.usb0");
 
         if Path::new(&link_path).exists() {
             println!("🔗 Removing function links...");
 
             match fs::remove_file(&link_path) {
                 Ok(_) => println!("   ✅ Removed hid.usb0 link"),
-                Err(e) => println!("   ⚠️  Failed to remove link: {}", e),
+                Err(e) => println!("   ⚠️  Failed to remove link: {e}"),
             }
         }
 
@@ -118,8 +118,8 @@ impl CleanupGadgetUseCase {
         for dir in strings_dirs {
             if Path::new(&dir).exists() {
                 match fs::remove_dir(&dir) {
-                    Ok(_) => println!("   ✅ Removed {}", dir),
-                    Err(e) => println!("   ⚠️  Failed to remove {}: {}", dir, e),
+                    Ok(_) => println!("   ✅ Removed {dir}"),
+                    Err(e) => println!("   ⚠️  Failed to remove {dir}: {e}"),
                 }
             }
         }
@@ -139,10 +139,10 @@ impl CleanupGadgetUseCase {
         for dir in config_dirs {
             if Path::new(&dir).exists() {
                 match fs::remove_dir(&dir) {
-                    Ok(_) => println!("   ✅ Removed {}", dir),
+                    Ok(_) => println!("   ✅ Removed {dir}"),
                     Err(e) => {
                         if e.kind() == std::io::ErrorKind::DirectoryNotEmpty {
-                            println!("   ⚠️  Directory not empty: {}", dir);
+                            println!("   ⚠️  Directory not empty: {dir}");
                             // List contents for debugging
                             if let Ok(entries) = fs::read_dir(&dir) {
                                 for entry in entries.flatten() {
@@ -150,7 +150,7 @@ impl CleanupGadgetUseCase {
                                 }
                             }
                         } else {
-                            println!("   ⚠️  Failed to remove {}: {}", dir, e);
+                            println!("   ⚠️  Failed to remove {dir}: {e}");
                         }
                     }
                 }
@@ -171,12 +171,12 @@ impl CleanupGadgetUseCase {
         for dir in function_dirs {
             if Path::new(&dir).exists() {
                 match fs::remove_dir(&dir) {
-                    Ok(_) => println!("   ✅ Removed {}", dir),
+                    Ok(_) => println!("   ✅ Removed {dir}"),
                     Err(e) => {
                         if e.kind() == std::io::ErrorKind::DirectoryNotEmpty {
-                            println!("   ⚠️  Directory not empty: {}", dir);
+                            println!("   ⚠️  Directory not empty: {dir}");
                         } else {
-                            println!("   ⚠️  Failed to remove {}: {}", dir, e);
+                            println!("   ⚠️  Failed to remove {dir}: {e}");
                         }
                     }
                 }
@@ -190,11 +190,11 @@ impl CleanupGadgetUseCase {
         println!("📦 Removing gadget directory...");
 
         // Remove strings directory first
-        let strings_dir = format!("{}/strings", gadget_path);
+        let strings_dir = format!("{gadget_path}/strings");
         if Path::new(&strings_dir).exists() {
             match fs::remove_dir(&strings_dir) {
                 Ok(_) => println!("   ✅ Removed strings directory"),
-                Err(e) => println!("   ⚠️  Failed to remove strings: {}", e),
+                Err(e) => println!("   ⚠️  Failed to remove strings: {e}"),
             }
         }
 
@@ -220,7 +220,7 @@ impl CleanupGadgetUseCase {
                             }
                         }
                     } else {
-                        println!("   ⚠️  Failed to remove gadget: {}", e);
+                        println!("   ⚠️  Failed to remove gadget: {e}");
                     }
                 }
             }
@@ -247,7 +247,7 @@ impl CleanupGadgetUseCase {
                 if let Ok(udc) = fs::read_to_string(&udc_path) {
                     let udc = udc.trim();
                     if !udc.is_empty() {
-                        println!("      Bound to: {}", udc);
+                        println!("      Bound to: {udc}");
                     }
                 }
             }

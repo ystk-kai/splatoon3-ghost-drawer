@@ -102,7 +102,7 @@ impl SystemdService {
         Self {
             name: name.clone(),
             state: SystemdServiceState::NotInstalled,
-            unit_file_path: format!("/etc/systemd/system/{}.service", name),
+            unit_file_path: format!("/etc/systemd/system/{name}.service"),
             exec_start: String::new(),
         }
     }

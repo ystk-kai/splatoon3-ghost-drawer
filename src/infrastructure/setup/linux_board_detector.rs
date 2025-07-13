@@ -22,7 +22,7 @@ impl BoardDetector for LinuxBoardDetector {
         // Try to read /proc/cpuinfo
         let cpuinfo = fs::read_to_string("/proc/cpuinfo").map_err(|e| {
             error!("Failed to read /proc/cpuinfo: {}", e);
-            SetupError::BoardDetectionFailed(format!("Cannot read /proc/cpuinfo: {}", e))
+            SetupError::BoardDetectionFailed(format!("Cannot read /proc/cpuinfo: {e}"))
         })?;
 
         debug!("CPU info:\n{}", cpuinfo);

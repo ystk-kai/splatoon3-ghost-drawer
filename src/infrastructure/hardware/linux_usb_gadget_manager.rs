@@ -50,7 +50,7 @@ impl LinuxUsbGadgetManager {
         let output = Command::new("modprobe")
             .arg("libcomposite")
             .output()
-            .map_err(|e| SetupError::Unknown(format!("Failed to run modprobe: {}", e)))?;
+            .map_err(|e| SetupError::Unknown(format!("Failed to run modprobe: {e}")))?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -113,11 +113,11 @@ impl LinuxUsbGadgetManager {
         }
 
         let entries = fs::read_dir(udc_dir)
-            .map_err(|e| SetupError::Unknown(format!("Failed to read UDC directory: {}", e)))?;
+            .map_err(|e| SetupError::Unknown(format!("Failed to read UDC directory: {e}")))?;
 
         for entry in entries {
             let entry = entry
-                .map_err(|e| SetupError::Unknown(format!("Failed to read UDC entry: {}", e)))?;
+                .map_err(|e| SetupError::Unknown(format!("Failed to read UDC entry: {e}")))?;
 
             let name = entry.file_name().to_string_lossy().to_string();
             if !name.is_empty() {
@@ -141,7 +141,7 @@ impl LinuxUsbGadgetManager {
 
         // Check for HID devices
         for i in 0..4 {
-            let hid_path = format!("/dev/hidg{}", i);
+            let hid_path = format!("/dev/hidg{i}");
             if Path::new(&hid_path).exists() {
                 info!("Found HID device: {}", hid_path);
 
@@ -151,11 +151,11 @@ impl LinuxUsbGadgetManager {
                         info!("Setting permissions for {} to {}:{}", hid_path, uid, gid);
 
                         let output = Command::new("chown")
-                            .arg(format!("{}:{}", uid, gid))
+                            .arg(format!("{uid}:{gid}"))
                             .arg(&hid_path)
                             .output()
                             .map_err(|e| {
-                                SetupError::Unknown(format!("Failed to change ownership: {}", e))
+                                SetupError::Unknown(format!("Failed to change ownership: {e}"))
                             })?;
 
                         if !output.status.success() {
@@ -171,7 +171,7 @@ impl LinuxUsbGadgetManager {
                     .arg(&hid_path)
                     .output()
                     .map_err(|e| {
-                        SetupError::Unknown(format!("Failed to change permissions: {}", e))
+                        SetupError::Unknown(format!("Failed to change permissions: {e}"))
                     })?;
 
                 if !output.status.success() {
@@ -200,14 +200,13 @@ impl UsbGadgetManager for LinuxUsbGadgetManager {
             let output = Command::new("mount")
                 .args(["-t", "configfs", "none", "/sys/kernel/config"])
                 .output()
-                .map_err(|e| SetupError::Unknown(format!("Failed to mount configfs: {}", e)))?;
+                .map_err(|e| SetupError::Unknown(format!("Failed to mount configfs: {e}")))?;
 
             if !output.status.success() {
                 let stderr = String::from_utf8_lossy(&output.stderr);
                 if !stderr.contains("already mounted") {
                     return Err(SetupError::Unknown(format!(
-                        "Failed to mount configfs: {}",
-                        stderr
+                        "Failed to mount configfs: {stderr}"
                     )));
                 }
             }
@@ -218,14 +217,14 @@ impl UsbGadgetManager for LinuxUsbGadgetManager {
             info!("Cleaning up existing gadget configuration...");
 
             // Unbind UDC if bound
-            let udc_path = format!("{}/UDC", GADGET_PATH);
+            let udc_path = format!("{GADGET_PATH}/UDC");
             if Path::new(&udc_path).exists() {
                 let _ = fs::write(&udc_path, "");
                 std::thread::sleep(std::time::Duration::from_millis(500));
             }
 
             // Remove symlinks from configs
-            let config_path = format!("{}/configs/c.1/hid.usb0", GADGET_PATH);
+            let config_path = format!("{GADGET_PATH}/configs/c.1/hid.usb0");
             if Path::new(&config_path).exists() {
                 let _ = fs::remove_file(&config_path);
             }
@@ -255,43 +254,43 @@ impl UsbGadgetManager for LinuxUsbGadgetManager {
         self.create_directory(GADGET_PATH)?;
 
         // Set vendor and product IDs
-        self.write_file(&format!("{}/idVendor", GADGET_PATH), VID)?;
-        self.write_file(&format!("{}/idProduct", GADGET_PATH), PID)?;
+        self.write_file(&format!("{GADGET_PATH}/idVendor"), VID)?;
+        self.write_file(&format!("{GADGET_PATH}/idProduct"), PID)?;
 
         // Set USB version
-        self.write_file(&format!("{}/bcdUSB", GADGET_PATH), "0x0200")?; // USB 2.0
-        self.write_file(&format!("{}/bcdDevice", GADGET_PATH), "0x0100")?;
+        self.write_file(&format!("{GADGET_PATH}/bcdUSB"), "0x0200")?; // USB 2.0
+        self.write_file(&format!("{GADGET_PATH}/bcdDevice"), "0x0100")?;
 
         // Set device class
-        self.write_file(&format!("{}/bDeviceClass", GADGET_PATH), "0x00")?;
-        self.write_file(&format!("{}/bDeviceSubClass", GADGET_PATH), "0x00")?;
-        self.write_file(&format!("{}/bDeviceProtocol", GADGET_PATH), "0x00")?;
+        self.write_file(&format!("{GADGET_PATH}/bDeviceClass"), "0x00")?;
+        self.write_file(&format!("{GADGET_PATH}/bDeviceSubClass"), "0x00")?;
+        self.write_file(&format!("{GADGET_PATH}/bDeviceProtocol"), "0x00")?;
 
         // Set strings
-        let strings_dir = format!("{}/strings/0x409", GADGET_PATH);
+        let strings_dir = format!("{GADGET_PATH}/strings/0x409");
         self.create_directory(&strings_dir)?;
-        self.write_file(&format!("{}/serialnumber", strings_dir), "000000000001")?;
-        self.write_file(&format!("{}/manufacturer", strings_dir), "Nintendo")?;
-        self.write_file(&format!("{}/product", strings_dir), "Pro Controller")?;
+        self.write_file(&format!("{strings_dir}/serialnumber"), "000000000001")?;
+        self.write_file(&format!("{strings_dir}/manufacturer"), "Nintendo")?;
+        self.write_file(&format!("{strings_dir}/product"), "Pro Controller")?;
 
         // Create configuration
-        let config_dir = format!("{}/configs/c.1", GADGET_PATH);
+        let config_dir = format!("{GADGET_PATH}/configs/c.1");
         self.create_directory(&config_dir)?;
-        self.write_file(&format!("{}/MaxPower", config_dir), "500")?;
+        self.write_file(&format!("{config_dir}/MaxPower"), "500")?;
 
-        let config_strings_dir = format!("{}/strings/0x409", config_dir);
+        let config_strings_dir = format!("{config_dir}/strings/0x409");
         self.create_directory(&config_strings_dir)?;
         self.write_file(
-            &format!("{}/configuration", config_strings_dir),
+            &format!("{config_strings_dir}/configuration"),
             "Pro Controller",
         )?;
 
         // Create HID function
-        let hid_dir = format!("{}/functions/hid.usb0", GADGET_PATH);
+        let hid_dir = format!("{GADGET_PATH}/functions/hid.usb0");
         self.create_directory(&hid_dir)?;
-        self.write_file(&format!("{}/protocol", hid_dir), "0")?;
-        self.write_file(&format!("{}/subclass", hid_dir), "0")?;
-        self.write_file(&format!("{}/report_length", hid_dir), "64")?;
+        self.write_file(&format!("{hid_dir}/protocol"), "0")?;
+        self.write_file(&format!("{hid_dir}/subclass"), "0")?;
+        self.write_file(&format!("{hid_dir}/report_length"), "64")?;
 
         // Write HID report descriptor for Nintendo Pro Controller
         // This is the actual descriptor used by the Pro Controller
@@ -402,7 +401,7 @@ impl UsbGadgetManager for LinuxUsbGadgetManager {
             0xC0, // End Collection
         ];
 
-        let report_desc_path = format!("{}/report_desc", hid_dir);
+        let report_desc_path = format!("{hid_dir}/report_desc");
         let mut file = fs::OpenOptions::new()
             .write(true)
             .truncate(true)
@@ -420,7 +419,7 @@ impl UsbGadgetManager for LinuxUsbGadgetManager {
         info!("Wrote HID report descriptor");
 
         // Link function to configuration
-        let function_link = format!("{}/hid.usb0", config_dir);
+        let function_link = format!("{config_dir}/hid.usb0");
         if !Path::new(&function_link).exists() {
             std::os::unix::fs::symlink(&hid_dir, &function_link).map_err(|e| {
                 error!("Failed to create symlink: {}", e);
@@ -431,7 +430,7 @@ impl UsbGadgetManager for LinuxUsbGadgetManager {
 
         // Enable the gadget
         let udc_name = self.get_udc_name()?;
-        self.write_file(&format!("{}/UDC", GADGET_PATH), &udc_name)?;
+        self.write_file(&format!("{GADGET_PATH}/UDC"), &udc_name)?;
 
         // Wait for HID device to be created
         std::thread::sleep(std::time::Duration::from_millis(1000));
@@ -451,7 +450,7 @@ impl UsbGadgetManager for LinuxUsbGadgetManager {
         }
 
         // Check if UDC is set (gadget is active)
-        let udc_path = format!("{}/UDC", GADGET_PATH);
+        let udc_path = format!("{GADGET_PATH}/UDC");
         if !Path::new(&udc_path).exists() {
             return Ok(false);
         }
@@ -464,7 +463,7 @@ impl UsbGadgetManager for LinuxUsbGadgetManager {
         info!("Reconnecting USB Gadget...");
 
         // Get the current UDC name
-        let udc_path = format!("{}/UDC", GADGET_PATH);
+        let udc_path = format!("{GADGET_PATH}/UDC");
         let udc_name = if Path::new(&udc_path).exists() {
             fs::read_to_string(&udc_path)
                 .ok()

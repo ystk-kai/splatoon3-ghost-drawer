@@ -26,7 +26,7 @@ impl EventId {
 
     /// 文字列から作成
     pub fn parse(s: &str) -> Result<Self, String> {
-        let uuid = Uuid::parse_str(s).map_err(|e| format!("Invalid UUID format: {}", e))?;
+        let uuid = Uuid::parse_str(s).map_err(|e| format!("Invalid UUID format: {e}"))?;
         Ok(Self(uuid))
     }
 

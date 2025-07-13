@@ -25,7 +25,7 @@ async fn main() -> anyhow::Result<()> {
         ..DebugConfig::default()
     };
     if let Err(e) = init_logging(&debug_config) {
-        eprintln!("Failed to initialize logging: {}", e);
+        eprintln!("Failed to initialize logging: {e}");
     }
 
     let cli = Cli::parse();
@@ -50,7 +50,7 @@ async fn main() -> anyhow::Result<()> {
                 }
                 Err(e) => {
                     error!("Setup failed: {}", e);
-                    eprintln!("❌ Setup failed: {}", e);
+                    eprintln!("❌ Setup failed: {e}");
                     std::process::exit(1);
                 }
             }
@@ -65,7 +65,7 @@ async fn main() -> anyhow::Result<()> {
                 }
                 Err(e) => {
                     error!("Application failed: {}", e);
-                    eprintln!("❌ Application failed: {}", e);
+                    eprintln!("❌ Application failed: {e}");
                     std::process::exit(1);
                 }
             }
@@ -82,7 +82,7 @@ async fn main() -> anyhow::Result<()> {
                     }
                     Err(e) => {
                         error!("Gadget cleanup failed: {}", e);
-                        eprintln!("❌ Gadget cleanup failed: {}", e);
+                        eprintln!("❌ Gadget cleanup failed: {e}");
                         std::process::exit(1);
                     }
                 }
@@ -99,7 +99,7 @@ async fn main() -> anyhow::Result<()> {
                     }
                     Err(e) => {
                         error!("Cleanup failed: {}", e);
-                        eprintln!("❌ Cleanup failed: {}", e);
+                        eprintln!("❌ Cleanup failed: {e}");
                         std::process::exit(1);
                     }
                 }
@@ -115,7 +115,7 @@ async fn main() -> anyhow::Result<()> {
                 }
                 Err(e) => {
                     error!("Failed to show system info: {}", e);
-                    eprintln!("❌ Failed to show system info: {}", e);
+                    eprintln!("❌ Failed to show system info: {e}");
                     std::process::exit(1);
                 }
             }
@@ -141,7 +141,7 @@ async fn main() -> anyhow::Result<()> {
                 }
                 Err(e) => {
                     error!("Controller test failed: {}", e);
-                    eprintln!("❌ Controller test failed: {}", e);
+                    eprintln!("❌ Controller test failed: {e}");
                     std::process::exit(1);
                 }
             }
@@ -163,7 +163,7 @@ async fn main() -> anyhow::Result<()> {
                 }
                 Err(e) => {
                     error!("Diagnostics failed: {}", e);
-                    eprintln!("❌ Diagnostics failed: {}", e);
+                    eprintln!("❌ Diagnostics failed: {e}");
                     std::process::exit(1);
                 }
             }
@@ -185,7 +185,7 @@ async fn main() -> anyhow::Result<()> {
                 }
                 Err(e) => {
                     error!("Connection fix failed: {}", e);
-                    eprintln!("❌ Connection fix failed: {}", e);
+                    eprintln!("❌ Connection fix failed: {e}");
                     std::process::exit(1);
                 }
             }
@@ -207,7 +207,7 @@ async fn main() -> anyhow::Result<()> {
                 }
                 Err(e) => {
                     error!("Permissions fix failed: {}", e);
-                    eprintln!("❌ Permissions fix failed: {}", e);
+                    eprintln!("❌ Permissions fix failed: {e}");
                     std::process::exit(1);
                 }
             }
@@ -222,7 +222,7 @@ async fn main() -> anyhow::Result<()> {
                 }
                 Err(e) => {
                     error!("USB gadget configuration failed: {}", e);
-                    eprintln!("❌ USB gadget configuration failed: {}", e);
+                    eprintln!("❌ USB gadget configuration failed: {e}");
                     std::process::exit(1);
                 }
             }

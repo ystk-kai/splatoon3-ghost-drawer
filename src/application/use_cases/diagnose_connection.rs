@@ -61,7 +61,7 @@ impl DiagnoseConnectionUseCase {
 
         let lsmod_output = Command::new("lsmod")
             .output()
-            .map_err(|e| HardwareError::Unknown(format!("Failed to run lsmod: {}", e)))?;
+            .map_err(|e| HardwareError::Unknown(format!("Failed to run lsmod: {e}")))?;
 
         let lsmod_text = String::from_utf8_lossy(&lsmod_output.stdout);
 
@@ -96,16 +96,16 @@ impl DiagnoseConnectionUseCase {
         println!("   ✅ Gadget directory exists");
 
         // UDCの確認
-        let udc_path = format!("{}/UDC", gadget_path);
+        let udc_path = format!("{gadget_path}/UDC");
         if let Ok(udc) = fs::read_to_string(&udc_path) {
             let udc = udc.trim();
             if udc.is_empty() {
                 println!("   ❌ UDC not bound");
             } else {
-                println!("   ✅ UDC bound to: {}", udc);
+                println!("   ✅ UDC bound to: {udc}");
 
                 // UDCの詳細情報
-                let udc_state_path = format!("/sys/class/udc/{}/state", udc);
+                let udc_state_path = format!("/sys/class/udc/{udc}/state");
                 if let Ok(state) = fs::read_to_string(&udc_state_path) {
                     println!("   📊 UDC state: {}", state.trim());
                 }
@@ -115,11 +115,11 @@ impl DiagnoseConnectionUseCase {
         }
 
         // HID functionの確認
-        let hid_path = format!("{}/functions/hid.usb0", gadget_path);
+        let hid_path = format!("{gadget_path}/functions/hid.usb0");
         if Path::new(&hid_path).exists() {
             println!("   ✅ HID function configured");
 
-            if let Ok(report_length) = fs::read_to_string(format!("{}/report_length", hid_path)) {
+            if let Ok(report_length) = fs::read_to_string(format!("{hid_path}/report_length")) {
                 println!("   📏 Report length: {} bytes", report_length.trim());
             }
         } else {
@@ -137,7 +137,7 @@ impl DiagnoseConnectionUseCase {
 
         for device in hid_devices {
             if Path::new(device).exists() {
-                println!("   ✅ {} exists", device);
+                println!("   ✅ {device} exists");
 
                 // 権限の確認
                 if let Ok(metadata) = fs::metadata(device) {
@@ -158,7 +158,7 @@ impl DiagnoseConnectionUseCase {
                                         "      ❌ Write test failed: Transport endpoint not connected"
                                     );
                                 } else {
-                                    println!("      ❌ Write test failed: {}", e);
+                                    println!("      ❌ Write test failed: {e}");
                                 }
                             }
                         }
@@ -167,7 +167,7 @@ impl DiagnoseConnectionUseCase {
                         if e.kind() == std::io::ErrorKind::PermissionDenied {
                             println!("      ❌ Permission denied (need sudo)");
                         } else {
-                            println!("      ❌ Cannot open: {}", e);
+                            println!("      ❌ Cannot open: {e}");
                         }
                     }
                 }
@@ -198,14 +198,13 @@ impl DiagnoseConnectionUseCase {
                             found_otg = true;
                             if let Ok(mode) = fs::read_to_string(&mode_path) {
                                 let mode = mode.trim();
-                                println!("   Mode: {}", mode);
+                                println!("   Mode: {mode}");
 
                                 if mode == "peripheral" || mode == "b_peripheral" {
                                     println!("   ✅ USB OTG is in peripheral mode");
                                 } else {
                                     println!(
-                                        "   ⚠️  USB OTG is in {} mode (should be peripheral)",
-                                        mode
+                                        "   ⚠️  USB OTG is in {mode} mode (should be peripheral)"
                                     );
                                 }
                             }
@@ -273,7 +272,7 @@ impl DiagnoseConnectionUseCase {
                 println!("   No recent USB/HID messages found");
             } else {
                 for line in relevant_lines.iter().rev() {
-                    println!("   - {}", line);
+                    println!("   - {line}");
                 }
             }
         }

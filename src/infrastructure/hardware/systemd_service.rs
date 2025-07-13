@@ -26,7 +26,7 @@ impl SystemdServiceManager {
             .output()
             .await
             .map_err(|e| {
-                HardwareError::SystemCommandFailed(format!("Failed to run systemctl: {}", e))
+                HardwareError::SystemCommandFailed(format!("Failed to run systemctl: {e}"))
             })?;
 
         Ok(output)
@@ -134,7 +134,7 @@ fi
         fs::write(setup_script_path, setup_script)
             .await
             .map_err(|e| {
-                HardwareError::FileOperationFailed(format!("Failed to write setup script: {}", e))
+                HardwareError::FileOperationFailed(format!("Failed to write setup script: {e}"))
             })?;
 
         // Make script executable
@@ -144,8 +144,7 @@ fi
             .await
             .map_err(|e| {
                 HardwareError::SystemCommandFailed(format!(
-                    "Failed to make script executable: {}",
-                    e
+                    "Failed to make script executable: {e}"
                 ))
             })?;
 
@@ -189,7 +188,7 @@ echo "USB Gadget removed"
         fs::write(remove_script_path, remove_script)
             .await
             .map_err(|e| {
-                HardwareError::FileOperationFailed(format!("Failed to write removal script: {}", e))
+                HardwareError::FileOperationFailed(format!("Failed to write removal script: {e}"))
             })?;
 
         // Make removal script executable
@@ -199,8 +198,7 @@ echo "USB Gadget removed"
             .await
             .map_err(|e| {
                 HardwareError::SystemCommandFailed(format!(
-                    "Failed to make removal script executable: {}",
-                    e
+                    "Failed to make removal script executable: {e}"
                 ))
             })?;
 
@@ -214,8 +212,7 @@ echo "USB Gadget removed"
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             return Err(HardwareError::SystemdServiceFailed(format!(
-                "Failed to enable service: {}",
-                stderr
+                "Failed to enable service: {stderr}"
             )));
         }
 
@@ -230,8 +227,7 @@ echo "USB Gadget removed"
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             return Err(HardwareError::SystemdServiceFailed(format!(
-                "Failed to start service: {}",
-                stderr
+                "Failed to start service: {stderr}"
             )));
         }
 
@@ -246,8 +242,7 @@ echo "USB Gadget removed"
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             return Err(HardwareError::SystemdServiceFailed(format!(
-                "Failed to stop service: {}",
-                stderr
+                "Failed to stop service: {stderr}"
             )));
         }
 
@@ -268,7 +263,7 @@ echo "USB Gadget removed"
             (false, true) => SystemdServiceState::Enabled,
             (false, false) => {
                 // Check if service file exists
-                let service_path = format!("/etc/systemd/system/{}.service", service_name);
+                let service_path = format!("/etc/systemd/system/{service_name}.service");
                 if std::path::Path::new(&service_path).exists() {
                     SystemdServiceState::Installed
                 } else {
@@ -288,8 +283,7 @@ echo "USB Gadget removed"
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             return Err(HardwareError::SystemdServiceFailed(format!(
-                "Failed to reload systemd daemon: {}",
-                stderr
+                "Failed to reload systemd daemon: {stderr}"
             )));
         }
 

@@ -70,7 +70,7 @@ impl LinuxBootConfigurator {
             }
         }
         if !found {
-            lines.push(format!("overlays={}", overlay_to_add));
+            lines.push(format!("overlays={overlay_to_add}"));
             info!("Added overlays={} to {}", overlay_to_add, env_file);
         }
 
@@ -101,7 +101,7 @@ impl LinuxBootConfigurator {
             .open(env_file)?;
 
         for line in &lines {
-            writeln!(file, "{}", line)?;
+            writeln!(file, "{line}")?;
         }
 
         Ok(())
@@ -164,8 +164,7 @@ impl BootConfigurator for LinuxBootConfigurator {
                 self.configure_raspberry_pi(board)
             }
             BoardModel::Unknown(name) => Err(SetupError::BootConfigurationFailed(format!(
-                "Unknown board model: {}",
-                name
+                "Unknown board model: {name}"
             ))),
         }
     }
@@ -250,7 +249,7 @@ impl BootConfigurator for LinuxBootConfigurator {
                             .open(env_file)?;
 
                         for line in &lines {
-                            writeln!(file, "{}", line)?;
+                            writeln!(file, "{line}")?;
                         }
                         info!("Removed USB OTG configuration from {}", env_file);
                     }

@@ -108,7 +108,7 @@ pub async fn create_artwork(
             warn!("JSON parsing error: {:?}", e);
             return Err(ErrorResponse::new(
                 StatusCode::UNPROCESSABLE_ENTITY,
-                format!("Invalid JSON: {}", e),
+                format!("Invalid JSON: {e}"),
             ));
         }
     };
@@ -157,8 +157,7 @@ pub async fn create_artwork(
             return Err(ErrorResponse::new(
                 StatusCode::UNPROCESSABLE_ENTITY,
                 format!(
-                    "Dot at index {} has coordinates outside canvas bounds",
-                    index
+                    "Dot at index {index} has coordinates outside canvas bounds"
                 ),
             ));
         }
@@ -264,8 +263,7 @@ pub async fn paint_artwork(
             Ok(Json(ApiResponse {
                 success: true,
                 message: format!(
-                    "Painting started (estimated time: {} seconds)",
-                    estimated_time
+                    "Painting started (estimated time: {estimated_time} seconds)"
                 ),
             }))
         }
@@ -322,7 +320,7 @@ pub async fn upload_artwork(
 
     Ok(Json(ArtworkResponse {
         id: artwork_id,
-        message: format!("Image '{}' uploaded successfully", name),
+        message: format!("Image '{name}' uploaded successfully"),
         artwork: None,
     }))
 }

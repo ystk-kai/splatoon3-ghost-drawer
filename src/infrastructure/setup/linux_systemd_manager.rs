@@ -28,7 +28,7 @@ impl LinuxSystemdManager {
         std::env::current_exe()
             .map(|path| path.to_string_lossy().to_string())
             .map_err(|e| {
-                SetupError::SystemdServiceFailed(format!("Failed to get executable path: {}", e))
+                SetupError::SystemdServiceFailed(format!("Failed to get executable path: {e}"))
             })
     }
 }
@@ -50,7 +50,7 @@ DefaultDependencies=no
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-ExecStart={} _internal_configure_gadget
+ExecStart={executable_path} _internal_configure_gadget
 ExecStop=/bin/sh -c 'echo "" > /sys/kernel/config/usb_gadget/nintendo_controller/UDC || true'
 StandardOutput=journal
 StandardError=journal
@@ -58,8 +58,7 @@ TimeoutStartSec=30s
 
 [Install]
 WantedBy=sysinit.target
-"#,
-            executable_path
+"#
         );
 
         // Write service file
@@ -69,11 +68,11 @@ WantedBy=sysinit.target
             .truncate(true)
             .open(GADGET_SERVICE_FILE)
             .map_err(|e| {
-                SetupError::SystemdServiceFailed(format!("Failed to create service file: {}", e))
+                SetupError::SystemdServiceFailed(format!("Failed to create service file: {e}"))
             })?;
 
         file.write_all(service_content.as_bytes()).map_err(|e| {
-            SetupError::SystemdServiceFailed(format!("Failed to write service file: {}", e))
+            SetupError::SystemdServiceFailed(format!("Failed to write service file: {e}"))
         })?;
 
         info!("Created systemd service file at {}", GADGET_SERVICE_FILE);
@@ -83,14 +82,13 @@ WantedBy=sysinit.target
             .arg("daemon-reload")
             .output()
             .map_err(|e| {
-                SetupError::SystemdServiceFailed(format!("Failed to run systemctl: {}", e))
+                SetupError::SystemdServiceFailed(format!("Failed to run systemctl: {e}"))
             })?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             return Err(SetupError::SystemdServiceFailed(format!(
-                "systemctl daemon-reload failed: {}",
-                stderr
+                "systemctl daemon-reload failed: {stderr}"
             )));
         }
 
@@ -103,17 +101,16 @@ WantedBy=sysinit.target
         info!("Enabling systemd service...");
 
         let output = Command::new("systemctl")
-            .args(["enable", &format!("{}.service", GADGET_SERVICE_NAME)])
+            .args(["enable", &format!("{GADGET_SERVICE_NAME}.service")])
             .output()
             .map_err(|e| {
-                SetupError::SystemdServiceFailed(format!("Failed to run systemctl: {}", e))
+                SetupError::SystemdServiceFailed(format!("Failed to run systemctl: {e}"))
             })?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             return Err(SetupError::SystemdServiceFailed(format!(
-                "systemctl enable failed: {}",
-                stderr
+                "systemctl enable failed: {stderr}"
             )));
         }
 
@@ -124,10 +121,10 @@ WantedBy=sysinit.target
 
     fn is_service_enabled(&self) -> Result<bool, SetupError> {
         let output = Command::new("systemctl")
-            .args(["is-enabled", &format!("{}.service", GADGET_SERVICE_NAME)])
+            .args(["is-enabled", &format!("{GADGET_SERVICE_NAME}.service")])
             .output()
             .map_err(|e| {
-                SetupError::SystemdServiceFailed(format!("Failed to run systemctl: {}", e))
+                SetupError::SystemdServiceFailed(format!("Failed to run systemctl: {e}"))
             })?;
 
         let result = String::from_utf8_lossy(&output.stdout).trim().to_string();
@@ -154,7 +151,7 @@ Requires=splatoon3-gadget.service
 
 [Service]
 Type=simple
-ExecStart={} run
+ExecStart={executable_path} run
 Restart=on-failure
 RestartSec=10
 User=root
@@ -165,8 +162,7 @@ TimeoutStartSec=60s
 
 [Install]
 WantedBy=multi-user.target
-"#,
-            executable_path
+"#
         );
 
         // Write service file
@@ -177,13 +173,12 @@ WantedBy=multi-user.target
             .open(WEB_SERVICE_FILE)
             .map_err(|e| {
                 SetupError::SystemdServiceFailed(format!(
-                    "Failed to create web service file: {}",
-                    e
+                    "Failed to create web service file: {e}"
                 ))
             })?;
 
         file.write_all(service_content.as_bytes()).map_err(|e| {
-            SetupError::SystemdServiceFailed(format!("Failed to write web service file: {}", e))
+            SetupError::SystemdServiceFailed(format!("Failed to write web service file: {e}"))
         })?;
 
         info!(
@@ -196,14 +191,13 @@ WantedBy=multi-user.target
             .arg("daemon-reload")
             .output()
             .map_err(|e| {
-                SetupError::SystemdServiceFailed(format!("Failed to run systemctl: {}", e))
+                SetupError::SystemdServiceFailed(format!("Failed to run systemctl: {e}"))
             })?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             return Err(SetupError::SystemdServiceFailed(format!(
-                "systemctl daemon-reload failed: {}",
-                stderr
+                "systemctl daemon-reload failed: {stderr}"
             )));
         }
 
@@ -216,17 +210,16 @@ WantedBy=multi-user.target
         info!("Enabling web UI systemd service...");
 
         let output = Command::new("systemctl")
-            .args(["enable", &format!("{}.service", WEB_SERVICE_NAME)])
+            .args(["enable", &format!("{WEB_SERVICE_NAME}.service")])
             .output()
             .map_err(|e| {
-                SetupError::SystemdServiceFailed(format!("Failed to run systemctl: {}", e))
+                SetupError::SystemdServiceFailed(format!("Failed to run systemctl: {e}"))
             })?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             return Err(SetupError::SystemdServiceFailed(format!(
-                "systemctl enable failed: {}",
-                stderr
+                "systemctl enable failed: {stderr}"
             )));
         }
 
@@ -242,12 +235,12 @@ WantedBy=multi-user.target
         for service_name in [GADGET_SERVICE_NAME, WEB_SERVICE_NAME] {
             // Stop service
             let _ = Command::new("systemctl")
-                .args(["stop", &format!("{}.service", service_name)])
+                .args(["stop", &format!("{service_name}.service")])
                 .output();
 
             // Disable service
             let _ = Command::new("systemctl")
-                .args(["disable", &format!("{}.service", service_name)])
+                .args(["disable", &format!("{service_name}.service")])
                 .output();
         }
 
@@ -256,8 +249,7 @@ WantedBy=multi-user.target
             if std::path::Path::new(service_file).exists() {
                 fs::remove_file(service_file).map_err(|e| {
                     SetupError::SystemdServiceFailed(format!(
-                        "Failed to remove service file {}: {}",
-                        service_file, e
+                        "Failed to remove service file {service_file}: {e}"
                     ))
                 })?;
                 info!("Removed service file: {}", service_file);
@@ -269,14 +261,13 @@ WantedBy=multi-user.target
             .arg("daemon-reload")
             .output()
             .map_err(|e| {
-                SetupError::SystemdServiceFailed(format!("Failed to run systemctl: {}", e))
+                SetupError::SystemdServiceFailed(format!("Failed to run systemctl: {e}"))
             })?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             return Err(SetupError::SystemdServiceFailed(format!(
-                "systemctl daemon-reload failed: {}",
-                stderr
+                "systemctl daemon-reload failed: {stderr}"
             )));
         }
 
@@ -304,14 +295,13 @@ WantedBy=multi-user.target
             .args([&binary_src, binary_dest.to_str().unwrap()])
             .output()
             .map_err(|e| {
-                SetupError::SystemdServiceFailed(format!("Failed to copy binary: {}", e))
+                SetupError::SystemdServiceFailed(format!("Failed to copy binary: {e}"))
             })?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             return Err(SetupError::SystemdServiceFailed(format!(
-                "Failed to copy binary: {}",
-                stderr
+                "Failed to copy binary: {stderr}"
             )));
         }
 
@@ -320,14 +310,13 @@ WantedBy=multi-user.target
             .args(["+x", binary_dest.to_str().unwrap()])
             .output()
             .map_err(|e| {
-                SetupError::SystemdServiceFailed(format!("Failed to chmod binary: {}", e))
+                SetupError::SystemdServiceFailed(format!("Failed to chmod binary: {e}"))
             })?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             return Err(SetupError::SystemdServiceFailed(format!(
-                "Failed to make binary executable: {}",
-                stderr
+                "Failed to make binary executable: {stderr}"
             )));
         }
 

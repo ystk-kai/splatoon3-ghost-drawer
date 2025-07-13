@@ -38,7 +38,7 @@ impl FixPermissionsUseCase {
 
         // Check for HID devices
         for i in 0..4 {
-            let hid_path = format!("/dev/hidg{}", i);
+            let hid_path = format!("/dev/hidg{i}");
             if Path::new(&hid_path).exists() {
                 info!("Found HID device: {}", hid_path);
 
@@ -48,11 +48,11 @@ impl FixPermissionsUseCase {
                         info!("Setting permissions for {} to {}:{}", hid_path, uid, gid);
 
                         let output = Command::new("chown")
-                            .arg(format!("{}:{}", uid, gid))
+                            .arg(format!("{uid}:{gid}"))
                             .arg(&hid_path)
                             .output()
                             .map_err(|e| {
-                                SetupError::Unknown(format!("Failed to change ownership: {}", e))
+                                SetupError::Unknown(format!("Failed to change ownership: {e}"))
                             })?;
 
                         if !output.status.success() {
@@ -70,7 +70,7 @@ impl FixPermissionsUseCase {
                     .arg(&hid_path)
                     .output()
                     .map_err(|e| {
-                        SetupError::Unknown(format!("Failed to change permissions: {}", e))
+                        SetupError::Unknown(format!("Failed to change permissions: {e}"))
                     })?;
 
                 if !output.status.success() {

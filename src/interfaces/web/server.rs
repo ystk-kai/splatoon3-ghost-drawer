@@ -22,7 +22,7 @@ pub async fn create_server(host: String, port: u16) -> anyhow::Result<()> {
     info!("Starting Splatoon3 Ghost Drawer web server...");
 
     // Parse socket address
-    let addr: SocketAddr = format!("{}:{}", host, port).parse()?;
+    let addr: SocketAddr = format!("{host}:{port}").parse()?;
 
     // Create shared application state
     let app_state = Arc::new(ArtworkState::new());
@@ -58,7 +58,7 @@ pub async fn create_server(host: String, port: u16) -> anyhow::Result<()> {
     let listener = TcpListener::bind(&addr).await?;
 
     println!("🌐 Web server started successfully!");
-    println!("   URL: http://{}", addr);
+    println!("   URL: http://{addr}");
     println!("   Press Ctrl+C to stop");
 
     // Run the server

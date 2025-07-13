@@ -60,7 +60,7 @@ impl<D: BoardDetector, G: UsbGadgetManager> ShowSystemInfoUseCase<D, G> {
                     BoardModel::RaspberryPiZero2W => "Raspberry Pi Zero 2W",
                     BoardModel::Unknown(s) => s,
                 };
-                println!("   Model: {}", model_str);
+                println!("   Model: {model_str}");
 
                 // All supported boards have USB OTG
                 let has_otg = !matches!(board, BoardModel::Unknown(_));
@@ -90,7 +90,7 @@ impl<D: BoardDetector, G: UsbGadgetManager> ShowSystemInfoUseCase<D, G> {
                         let env_files = vec!["/boot/orangepiEnv.txt", "/boot/armbianEnv.txt"];
                         for env_file in env_files {
                             if Path::new(env_file).exists() {
-                                println!("      - Boot env file: {}", env_file);
+                                println!("      - Boot env file: {env_file}");
                                 if let Ok(content) = fs::read_to_string(env_file) {
                                     if content.contains("usb-otg") {
                                         println!("        ✅ USB OTG overlay enabled");
@@ -108,7 +108,7 @@ impl<D: BoardDetector, G: UsbGadgetManager> ShowSystemInfoUseCase<D, G> {
                 }
             }
             Err(e) => {
-                println!("   ❌ Failed to detect board: {}", e);
+                println!("   ❌ Failed to detect board: {e}");
             }
         }
 
@@ -134,11 +134,11 @@ impl<D: BoardDetector, G: UsbGadgetManager> ShowSystemInfoUseCase<D, G> {
                                 if udc.is_empty() {
                                     println!("   Connection: ❌ Not connected (UDC not bound)");
                                 } else {
-                                    println!("   Connection: ✅ Connected (UDC: {})", udc);
+                                    println!("   Connection: ✅ Connected (UDC: {udc})");
                                 }
                             }
                             Err(e) => {
-                                println!("   Connection: ⚠️  Unknown (Failed to read UDC: {})", e);
+                                println!("   Connection: ⚠️  Unknown (Failed to read UDC: {e})");
                             }
                         }
                     }
@@ -148,7 +148,7 @@ impl<D: BoardDetector, G: UsbGadgetManager> ShowSystemInfoUseCase<D, G> {
                 }
             }
             Err(e) => {
-                println!("   Status: ❌ Error checking gadget: {}", e);
+                println!("   Status: ❌ Error checking gadget: {e}");
             }
         }
 
@@ -197,7 +197,7 @@ impl<D: BoardDetector, G: UsbGadgetManager> ShowSystemInfoUseCase<D, G> {
         } else {
             println!("   Devices: ✅ Found {} device(s)", found_devices.len());
             for device in &found_devices {
-                println!("      - {}", device);
+                println!("      - {device}");
 
                 if verbose {
                     // デバイスの権限情報
@@ -222,7 +222,7 @@ impl<D: BoardDetector, G: UsbGadgetManager> ShowSystemInfoUseCase<D, G> {
         ];
 
         for (service_name, description) in services {
-            print!("   {}: ", description);
+            print!("   {description}: ");
 
             // systemctl is-enabled
             let enabled_output = std::process::Command::new("systemctl")
@@ -271,11 +271,11 @@ impl<D: BoardDetector, G: UsbGadgetManager> ShowSystemInfoUseCase<D, G> {
         let modules = vec!["dwc2", "libcomposite"];
 
         for module in modules {
-            print!("   {}: ", module);
+            print!("   {module}: ");
 
             let output = std::process::Command::new("lsmod")
                 .output()
-                .map_err(|e| SetupError::Unknown(format!("Failed to run lsmod: {}", e)))?;
+                .map_err(|e| SetupError::Unknown(format!("Failed to run lsmod: {e}")))?;
 
             let lsmod_output = String::from_utf8_lossy(&output.stdout);
             if lsmod_output.lines().any(|line| line.starts_with(module)) {
@@ -313,7 +313,7 @@ impl<D: BoardDetector, G: UsbGadgetManager> ShowSystemInfoUseCase<D, G> {
                 if !usb_lines.is_empty() {
                     println!("   Recent USB Messages:");
                     for line in usb_lines.iter().rev() {
-                        println!("      - {}", line);
+                        println!("      - {line}");
                     }
                 }
             }
@@ -332,14 +332,14 @@ impl<D: BoardDetector, G: UsbGadgetManager> ShowSystemInfoUseCase<D, G> {
             .arg("-t")
             .arg("configfs")
             .output()
-            .map_err(|e| SetupError::Unknown(format!("Failed to check mount: {}", e)))?;
+            .map_err(|e| SetupError::Unknown(format!("Failed to check mount: {e}")))?;
 
         let mount_info = String::from_utf8_lossy(&output.stdout);
         if mount_info.is_empty() {
             println!("      ❌ ConfigFS is not mounted");
         } else {
             for line in mount_info.lines() {
-                println!("      ✅ {}", line);
+                println!("      ✅ {line}");
             }
         }
 
@@ -386,7 +386,7 @@ impl<D: BoardDetector, G: UsbGadgetManager> ShowSystemInfoUseCase<D, G> {
         let gadget_path = "/sys/kernel/config/usb_gadget/nintendo_controller";
 
         if Path::new(gadget_path).exists() {
-            println!("      ✅ {} exists", gadget_path);
+            println!("      ✅ {gadget_path} exists");
 
             // ディレクトリ内の主要ファイル
             let important_files = vec![
@@ -398,7 +398,7 @@ impl<D: BoardDetector, G: UsbGadgetManager> ShowSystemInfoUseCase<D, G> {
             ];
 
             for file in important_files {
-                let file_path = format!("{}/{}", gadget_path, file);
+                let file_path = format!("{gadget_path}/{file}");
                 if let Ok(content) = fs::read_to_string(&file_path) {
                     println!("      📄 {}: {}", file, content.trim());
                 }
@@ -422,7 +422,7 @@ impl<D: BoardDetector, G: UsbGadgetManager> ShowSystemInfoUseCase<D, G> {
                     use std::os::unix::fs::PermissionsExt;
                     let mode = metadata.permissions().mode();
                     let perms = format!("{:o}", mode & 0o777);
-                    println!("      {} ({})", path, perms);
+                    println!("      {path} ({perms})");
                 }
             }
         }
@@ -446,7 +446,7 @@ impl<D: BoardDetector, G: UsbGadgetManager> ShowSystemInfoUseCase<D, G> {
 
             if !gadget_lines.is_empty() {
                 for line in gadget_lines.iter().rev() {
-                    println!("      {}", line);
+                    println!("      {line}");
                 }
             } else {
                 println!("      No gadget-related messages found");

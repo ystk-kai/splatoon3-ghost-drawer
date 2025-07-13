@@ -156,7 +156,7 @@ impl SetupResult {
         }
 
         for warning in &self.warnings {
-            lines.push(format!("⚠️  {}", warning));
+            lines.push(format!("⚠️  {warning}"));
         }
 
         lines.join("\n")

@@ -47,8 +47,7 @@ impl<E: ControllerEmulator> TestControllerUseCase<E> {
             _ => {
                 error!("Unknown test mode: {}", mode);
                 return Err(HardwareError::InvalidParameter(format!(
-                    "Unknown test mode: {}",
-                    mode
+                    "Unknown test mode: {mode}"
                 )));
             }
         }
@@ -150,9 +149,9 @@ impl<E: ControllerEmulator> TestControllerUseCase<E> {
         let mut button_index = 0;
         while start_time.elapsed() < test_duration && button_index < buttons.len() {
             let (button, name) = &buttons[button_index];
-            println!("   Testing {} button...", name);
+            println!("   Testing {name} button...");
 
-            let mut command = ControllerCommand::new(format!("Test {} button", name));
+            let mut command = ControllerCommand::new(format!("Test {name} button"));
             command = command
                 .add_action(ControllerAction::press_button(*button, 200))
                 .add_action(ControllerAction::release_button(*button, 200))

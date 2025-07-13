@@ -58,19 +58,19 @@ impl HidDeviceRepository for LinuxHidDeviceRepository {
                 } else if e.kind() == std::io::ErrorKind::NotFound {
                     ControllerError::DevicePathNotAvailable(path.to_string())
                 } else {
-                    ControllerError::HidWriteFailed(format!("Failed to open {}: {}", path, e))
+                    ControllerError::HidWriteFailed(format!("Failed to open {path}: {e}"))
                 }
             })?;
 
         // レポートを書き込む
         file.write_all(&report_bytes).await.map_err(|e| {
-            ControllerError::HidWriteFailed(format!("Failed to write report: {}", e))
+            ControllerError::HidWriteFailed(format!("Failed to write report: {e}"))
         })?;
 
         // 確実にフラッシュする
         file.flush()
             .await
-            .map_err(|e| ControllerError::HidWriteFailed(format!("Failed to flush: {}", e)))?;
+            .map_err(|e| ControllerError::HidWriteFailed(format!("Failed to flush: {e}")))?;
 
         debug!("HID report written successfully: {:?}", report_bytes);
         Ok(())
@@ -96,7 +96,7 @@ impl HidDeviceRepository for LinuxHidDeviceRepository {
                 } else if e.kind() == std::io::ErrorKind::NotFound {
                     ControllerError::DevicePathNotAvailable(path.to_string())
                 } else {
-                    ControllerError::HidReadFailed(format!("Failed to open {}: {}", path, e))
+                    ControllerError::HidReadFailed(format!("Failed to open {path}: {e}"))
                 }
             })?;
 
@@ -107,7 +107,7 @@ impl HidDeviceRepository for LinuxHidDeviceRepository {
         use tokio::io::AsyncReadExt;
         file.read_exact(&mut buffer)
             .await
-            .map_err(|e| ControllerError::HidReadFailed(format!("Failed to read report: {}", e)))?;
+            .map_err(|e| ControllerError::HidReadFailed(format!("Failed to read report: {e}")))?;
 
         // バイト配列からHidReportに変換
         HidReport::from_bytes(&buffer).map_err(|_e| ControllerError::InvalidHidReport)
@@ -136,8 +136,7 @@ impl HidDeviceRepository for LinuxHidDeviceRepository {
                     Err(ControllerError::PermissionDenied)
                 } else {
                     Err(ControllerError::DeviceInitFailed(format!(
-                        "Cannot open {}: {}",
-                        path, e
+                        "Cannot open {path}: {e}"
                     )))
                 }
             }
@@ -158,16 +157,16 @@ impl HidDeviceRepository for LinuxHidDeviceRepository {
 
         let mut entries = tokio::fs::read_dir(dev_path)
             .await
-            .map_err(|e| ControllerError::IoError(format!("Failed to read /dev: {}", e)))?;
+            .map_err(|e| ControllerError::IoError(format!("Failed to read /dev: {e}")))?;
 
         while let Some(entry) = entries
             .next_entry()
             .await
-            .map_err(|e| ControllerError::IoError(format!("Failed to read entry: {}", e)))?
+            .map_err(|e| ControllerError::IoError(format!("Failed to read entry: {e}")))?
         {
             if let Ok(name) = entry.file_name().into_string() {
                 if name.starts_with("hidg") {
-                    devices.push(format!("/dev/{}", name));
+                    devices.push(format!("/dev/{name}"));
                 }
             }
         }
@@ -200,19 +199,19 @@ impl HidDeviceRepository for LinuxHidDeviceRepository {
                 } else if e.kind() == std::io::ErrorKind::NotFound {
                     ControllerError::DevicePathNotAvailable(path.to_string())
                 } else {
-                    ControllerError::HidWriteFailed(format!("Failed to open {}: {}", path, e))
+                    ControllerError::HidWriteFailed(format!("Failed to open {path}: {e}"))
                 }
             })?;
 
         // レポートを書き込む
         file.write_all(report).await.map_err(|e| {
-            ControllerError::HidWriteFailed(format!("Failed to write report: {}", e))
+            ControllerError::HidWriteFailed(format!("Failed to write report: {e}"))
         })?;
 
         // 確実にフラッシュする
         file.flush()
             .await
-            .map_err(|e| ControllerError::HidWriteFailed(format!("Failed to flush: {}", e)))?;
+            .map_err(|e| ControllerError::HidWriteFailed(format!("Failed to flush: {e}")))?;
 
         debug!("Pro Controller report written successfully");
         Ok(())
@@ -238,7 +237,7 @@ impl HidDeviceRepository for LinuxHidDeviceRepository {
                 } else if e.kind() == std::io::ErrorKind::NotFound {
                     ControllerError::DevicePathNotAvailable(path.to_string())
                 } else {
-                    ControllerError::HidReadFailed(format!("Failed to open {}: {}", path, e))
+                    ControllerError::HidReadFailed(format!("Failed to open {path}: {e}"))
                 }
             })?;
 
@@ -258,8 +257,7 @@ impl HidDeviceRepository for LinuxHidDeviceRepository {
                     Ok(Vec::new())
                 } else {
                     Err(ControllerError::HidReadFailed(format!(
-                        "Failed to read command: {}",
-                        e
+                        "Failed to read command: {e}"
                     )))
                 }
             }
@@ -294,18 +292,18 @@ impl HidDeviceRepository for LinuxHidDeviceRepository {
                 } else if e.kind() == std::io::ErrorKind::NotFound {
                     ControllerError::DevicePathNotAvailable(path.to_string())
                 } else {
-                    ControllerError::HidWriteFailed(format!("Failed to open {}: {}", path, e))
+                    ControllerError::HidWriteFailed(format!("Failed to open {path}: {e}"))
                 }
             })?;
 
         // レスポンスを書き込む
         file.write_all(response).await.map_err(|e| {
-            ControllerError::HidWriteFailed(format!("Failed to write response: {}", e))
+            ControllerError::HidWriteFailed(format!("Failed to write response: {e}"))
         })?;
 
         file.flush()
             .await
-            .map_err(|e| ControllerError::HidWriteFailed(format!("Failed to flush: {}", e)))?;
+            .map_err(|e| ControllerError::HidWriteFailed(format!("Failed to flush: {e}")))?;
 
         debug!("USB response written successfully");
         Ok(())

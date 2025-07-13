@@ -447,18 +447,17 @@ impl ArtworkEvent {
             }
             Self::ArtworkCanvasUpdated { drawable_dots, .. } => {
                 format!(
-                    "キャンバスが更新されました（描画可能ドット: {}個）",
-                    drawable_dots
+                    "キャンバスが更新されました（描画可能ドット: {drawable_dots}個）"
                 )
             }
             Self::ArtworkDeleted { artwork_name, .. } => {
-                format!("アートワーク「{}」が削除されました", artwork_name)
+                format!("アートワーク「{artwork_name}」が削除されました")
             }
             Self::PaintingStarted {
                 total_dots_to_paint,
                 ..
             } => {
-                format!("描画を開始しました（{}個のドット）", total_dots_to_paint)
+                format!("描画を開始しました（{total_dots_to_paint}個のドット）")
             }
             Self::DotPainted {
                 coordinates,
@@ -466,8 +465,7 @@ impl ArtworkEvent {
                 ..
             } => {
                 format!(
-                    "ドット #{} を座標 {} に描画しました",
-                    sequence_number, coordinates
+                    "ドット #{sequence_number} を座標 {coordinates} に描画しました"
                 )
             }
             Self::PaintingPaused {
@@ -479,7 +477,7 @@ impl ArtworkEvent {
                 )
             }
             Self::PaintingResumed { remaining_dots, .. } => {
-                format!("描画を再開しました（残り: {}個）", remaining_dots)
+                format!("描画を再開しました（残り: {remaining_dots}個）")
             }
             Self::PaintingCompleted {
                 total_dots_painted,
@@ -487,8 +485,7 @@ impl ArtworkEvent {
                 ..
             } => {
                 format!(
-                    "描画が完了しました（{}個のドット、{}秒）",
-                    total_dots_painted, painting_duration_seconds
+                    "描画が完了しました（{total_dots_painted}個のドット、{painting_duration_seconds}秒）"
                 )
             }
             Self::PaintingCancelled {
@@ -508,8 +505,7 @@ impl ArtworkEvent {
                 ..
             } => {
                 format!(
-                    "描画エラーが発生しました（リトライ: {}回、エラー: {}）",
-                    retry_count, error_message
+                    "描画エラーが発生しました（リトライ: {retry_count}回、エラー: {error_message}）"
                 )
             }
             Self::ArtworkReset {
