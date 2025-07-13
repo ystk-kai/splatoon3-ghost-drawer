@@ -2,9 +2,11 @@ name: Build
 
 on:
   push:
-    branches: [ master, main ]
+    branches: [ '**' ]  # すべてのブランチでトリガー
+    tags-ignore:
+      - 'v*'  # タグのプッシュ時は実行しない（release.ymlが担当）
   pull_request:
-    branches: [ master, main ]
+    branches: [ '**' ]  # すべてのブランチへのPRでトリガー
   workflow_dispatch:
 
 env:
@@ -66,7 +68,13 @@ jobs:
     name: Upload Latest Build
     runs-on: ubuntu-latest
     needs: build
-    if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main'
+    # masterブランチまたはfeature/*, develop, stagingブランチの場合にアーティファクトを保存
+    if: |
+      github.ref == 'refs/heads/master' || 
+      github.ref == 'refs/heads/main' ||
+      startsWith(github.ref, 'refs/heads/feature/') ||
+      github.ref == 'refs/heads/develop' ||
+      github.ref == 'refs/heads/staging'
     
     steps:
       - uses: actions/checkout@v4
