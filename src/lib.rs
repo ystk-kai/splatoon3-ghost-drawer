@@ -109,6 +109,7 @@ pub mod infrastructure {
         pub mod linux_hid_device;
         pub mod linux_usb_gadget;
         pub mod linux_usb_gadget_manager;
+        pub mod mock_controller;
         pub mod systemd_service;
     }
 
@@ -131,7 +132,7 @@ pub mod interfaces {
         pub mod embedded_assets;
         mod error_response;
         mod handlers;
-        mod log_streamer;
+        pub mod log_streamer;
         mod models;
         pub mod server;
 

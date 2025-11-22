@@ -145,27 +145,27 @@ impl SystemdServiceManager for LinuxSystemdManager {
     fn create_gadget_service(&self) -> Result<(), SetupError> {
         info!("Creating systemd service file...");
 
-        // Get the current executable path dynamically
-        let executable_path = Self::get_executable_path()?;
+        // Use the installed binary path
+        let installed_binary_path = "/opt/splatoon3-ghost-drawer/splatoon3-ghost-drawer";
 
         let service_content = format!(
             r#"[Unit]
 Description=Splatoon3 Ghost Drawer USB Gadget Configuration
-After=sysinit.target
-Before=basic.target
-DefaultDependencies=no
+After=network.target
+# Before=basic.target
+# DefaultDependencies=no
 
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-ExecStart={executable_path} _internal_configure_gadget
+ExecStart={installed_binary_path} _internal_configure_gadget
 ExecStop=/bin/sh -c 'echo "" > /sys/kernel/config/usb_gadget/nintendo_controller/UDC || true'
 StandardOutput=journal
 StandardError=journal
 TimeoutStartSec=30s
 
 [Install]
-WantedBy=sysinit.target
+WantedBy=multi-user.target
 "#
         );
 
@@ -253,8 +253,8 @@ WantedBy=sysinit.target
         // Setup HID device permissions
         self.setup_hid_device_permissions()?;
 
-        // Get the current executable path dynamically
-        let executable_path = Self::get_executable_path()?;
+        // Use the installed binary path
+        let installed_binary_path = "/opt/splatoon3-ghost-drawer/splatoon3-ghost-drawer";
 
         let service_content = format!(
             r#"[Unit]
@@ -265,7 +265,7 @@ Requires=splatoon3-gadget.service
 
 [Service]
 Type=simple
-ExecStart={executable_path} run
+ExecStart={installed_binary_path} run
 Restart=on-failure
 RestartSec=10
 User=splatoon3

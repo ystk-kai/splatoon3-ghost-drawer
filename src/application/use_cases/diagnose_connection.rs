@@ -33,6 +33,9 @@ impl DiagnoseConnectionUseCase {
         // 3. カーネルモジュールの確認
         self.check_kernel_modules()?;
 
+        // 3.5. 競合の確認
+        self.check_g_ether_conflict()?;
+
         // 4. UDC（USB Device Controller）の確認
         self.check_udc_status()?;
 
@@ -57,6 +60,27 @@ impl DiagnoseConnectionUseCase {
         // 6. 推奨される対処法
         self.show_recommendations();
 
+        Ok(())
+    }
+
+    fn check_g_ether_conflict(&self) -> Result<(), HardwareError> {
+        println!("🚫 Checking for conflicts:");
+        
+        let output = Command::new("lsmod")
+            .output()
+            .map_err(|e| HardwareError::Unknown(format!("Failed to run lsmod: {e}")))?;
+        let lsmod = String::from_utf8_lossy(&output.stdout);
+
+        if lsmod.contains("g_ether") {
+            println!("   ❌ g_ether module detected!");
+            println!("      This module conflicts with the Nintendo Switch gadget.");
+            println!("      Please remove 'modules-load=dwc2,g_ether' from /boot/cmdline.txt");
+            println!("      or /boot/firmware/cmdline.txt and reboot.");
+        } else {
+            println!("   ✅ No g_ether conflict detected");
+        }
+        
+        println!();
         Ok(())
     }
 
@@ -227,8 +251,20 @@ impl DiagnoseConnectionUseCase {
         }
 
         if !found_otg {
-            println!("   ❌ USB OTG mode file not found");
-            println!("   This may indicate USB OTG is not enabled in Device Tree");
+            // Check for Raspberry Pi dwc2
+            let lsmod = Command::new("lsmod").output().ok();
+            let is_dwc2_loaded = if let Some(output) = lsmod {
+                String::from_utf8_lossy(&output.stdout).contains("dwc2")
+            } else {
+                false
+            };
+
+            if is_dwc2_loaded {
+                println!("   ✅ dwc2 module loaded (Raspberry Pi)");
+            } else {
+                println!("   ❌ USB OTG mode file not found");
+                println!("   This may indicate USB OTG is not enabled in Device Tree");
+            }
         }
 
         println!();
@@ -242,9 +278,9 @@ impl DiagnoseConnectionUseCase {
         if let Ok(output) = Command::new("lsusb").output() {
             let lsusb = String::from_utf8_lossy(&output.stdout);
             if lsusb.contains("057e:2009") {
-                println!("   ✅ Nintendo Pro Controller detected by host");
+                println!("   ℹ️  Nintendo Pro Controller detected by host (Self-check)");
             } else {
-                println!("   ❌ Pro Controller not detected by host");
+                println!("   ℹ️  Pro Controller not detected by host (Normal for Gadget mode)");
             }
         }
 

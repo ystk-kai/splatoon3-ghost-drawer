@@ -10,7 +10,7 @@ use splatoon3_ghost_drawer::application::use_cases::{
     DiagnoseConnectionUseCase, FixConnectionUseCase, FixPermissionsUseCase, RunApplicationUseCase,
     SetupSystemUseCase, ShowSystemInfoUseCase, TestControllerUseCase,
 };
-use splatoon3_ghost_drawer::debug::{DebugConfig, init_logging};
+use splatoon3_ghost_drawer::debug::DebugConfig;
 use splatoon3_ghost_drawer::infrastructure::hardware::linux_usb_gadget_manager::LinuxUsbGadgetManager;
 use splatoon3_ghost_drawer::infrastructure::setup::{
     LinuxBoardDetector, LinuxBootConfigurator, LinuxSystemdManager,
@@ -19,14 +19,32 @@ use splatoon3_ghost_drawer::infrastructure::setup::{
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     // Initialize logging
-    let debug_config = DebugConfig {
+    let _debug_config = DebugConfig {
         enable_file_logging: false,
         log_directory: "/tmp/splatoon3-ghost-drawer-logs".to_string(),
         ..DebugConfig::default()
     };
-    if let Err(e) = init_logging(&debug_config) {
-        eprintln!("Failed to initialize logging: {e}");
-    }
+    
+    // Initialize tracing subscriber with both stdout and our custom capture layer
+    use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
+    use splatoon3_ghost_drawer::interfaces::web::log_streamer::LogCaptureLayer;
+
+    let env_filter = EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| EnvFilter::new("info,tokio_tungstenite=warn,tungstenite=warn"));
+
+    tracing_subscriber::registry()
+        .with(tracing_subscriber::fmt::layer())
+        .with(env_filter)
+        .with(LogCaptureLayer)
+        .init();
+
+    // ビルド時刻を表示（デプロイ確認用）
+    info!(
+        "Build: {} v{} ({})",
+        env!("CARGO_PKG_NAME"),
+        env!("CARGO_PKG_VERSION"),
+        env!("BUILD_TIMESTAMP")
+    );
 
     let cli = Cli::parse();
 
