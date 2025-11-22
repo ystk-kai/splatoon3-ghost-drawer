@@ -1320,6 +1320,7 @@ dependencies = [
  "clap",
  "glob",
  "hyper",
+ "lazy_static",
  "libc",
  "md5",
  "mime_guess",

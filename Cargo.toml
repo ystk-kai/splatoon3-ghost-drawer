@@ -14,6 +14,7 @@ uuid = { version = "1.17.0", features = ["v4", "serde"] }
 # ログとデバッグ用のクレート
 tracing = "0.1.41"
 tracing-subscriber = { version = "0.3.19", features = ["env-filter", "json"] }
+lazy_static = "1.4"
 tracing-appender = "0.2.3"
 # Web UI用のクレート
 axum = { version = "0.8.4", features = ["ws", "multipart"] }
@@ -31,6 +32,9 @@ mime_guess = "2.0.5"
 nix = { version = "0.29", features = ["user"] }
 glob = "0.3.1"
 # 必要なクレートは実装しながら cargo add で追加
+
+[build-dependencies]
+chrono = "0.4"
 
 [dev-dependencies]
 # テスト用の依存関係
