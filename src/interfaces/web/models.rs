@@ -27,15 +27,23 @@ pub struct HardwareDetails {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ApiResponse {
-    pub success: bool,
-    pub message: String,
+pub struct CalibrationRequest {
+    pub press_ms: u32,
+    pub release_ms: u32,
+    pub wait_ms: u32,
+    #[serde(default)]
+    pub skip_initialization: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LogMessage {
-    pub timestamp: String,
-    pub level: String,
-    pub message: String,
-    pub module: Option<String>,
+impl Default for CalibrationRequest {
+    fn default() -> Self {
+        Self {
+            press_ms: 50,
+            release_ms: 30,
+            wait_ms: 20,
+            skip_initialization: false,
+        }
+    }
 }
+
+

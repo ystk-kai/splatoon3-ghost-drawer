@@ -73,11 +73,33 @@ class GhostDrawerApp {
 
         // アクションボタン
         document.getElementById('paintDeviceButton').addEventListener('click', () => {
-            this.startPainting(true);
+            this.showPaintPrepareModal(true);
         });
-        
+
         document.getElementById('paintSimulationButton').addEventListener('click', () => {
-            this.startPainting(false);
+            this.showPaintPrepareModal(false);
+        });
+
+        // 描画準備モーダル
+        document.getElementById('closePaintPrepareButton')?.addEventListener('click', () => {
+            this.closePaintPrepareModal();
+        });
+
+        document.getElementById('cancelPaintPrepareButton')?.addEventListener('click', () => {
+            this.closePaintPrepareModal();
+        });
+
+        document.getElementById('openCalibrationFromPaintButton')?.addEventListener('click', () => {
+            // 描画準備モーダルを閉じてキャリブレーションモーダルを開く
+            this.closePaintPrepareModal();
+            if (window.calibrationManager) {
+                window.calibrationManager.openModal();
+            }
+        });
+
+        document.getElementById('startPaintingButton')?.addEventListener('click', () => {
+            this.closePaintPrepareModal();
+            this.executePainting(this.pendingPaintUseDevice);
         });
 
         document.getElementById('downloadButton').addEventListener('click', () => {
@@ -704,6 +726,13 @@ class GhostDrawerApp {
                 processedData.height
             );
             
+            if (dots.length === 0) {
+                this.addLog('ドットが検出されませんでした。閾値を調整してください。', 'warning');
+                this.displayProcessedCanvas(processedData.canvas);
+                this.hideProgress();
+                return;
+            }
+            
             this.addLog(`2値化完了: ${dots.length}個の描画ドット`, 'info');
             
             // 変換結果をサーバーに送信
@@ -783,68 +812,9 @@ class GhostDrawerApp {
 
 
 
-    async startPainting(useDevice = null) {
-        if (!this.currentFile || this.isProcessing || !this.currentBinaryData) return;
 
-        // useDeviceがnullの場合は接続状態に依存
-        const isDevicePainting = useDevice !== null ? useDevice : this.isHardwareConnected;
 
-        this.isProcessing = true;
-        this.isPainting = true;
-        this.updateButtonStates();
-        
-        // 描画データを準備
-        this.preparePaintingData();
-        
-        // 描画進捗エリアを表示
-        document.getElementById('paintingProgress').classList.remove('hidden');
-        this.hideProgress();
-        
-        // シミュレーションの場合は倍速コントロールと進捗スライダーを表示
-        if (!isDevicePainting) {
-            document.getElementById('simulationSpeedControl').classList.remove('hidden');
-            document.getElementById('progressSliderControl').classList.remove('hidden');
-            // 進捗スライダーをリセット
-            document.getElementById('progressSlider').value = 0;
-            document.getElementById('progressSliderValue').textContent = '0%';
-        } else {
-            document.getElementById('simulationSpeedControl').classList.add('hidden');
-            document.getElementById('progressSliderControl').classList.add('hidden');
-        }
 
-        try {
-            if (isDevicePainting) {
-                // 実際の描画
-                this.addLog(`Nintendo Switchで描画を開始します... (速度: ${this.paintingSpeed.toFixed(1)}ドット/秒)`, 'info');
-                
-                const response = await fetch(`/api/artworks/${this.currentArtworkId}/paint`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        speed: this.paintingSpeed,
-                        preview: false
-                    })
-                });
-
-                if (!response.ok) {
-                    throw new Error(`描画エラー: ${response.status}`);
-                }
-                
-                // WebSocketで進捗を監視
-                this.startPaintingVisualization();
-            } else {
-                // シミュレーション
-                this.addLog(`描画シミュレーションを開始します... (速度: ${this.paintingSpeed.toFixed(1)}ドット/秒)`, 'info');
-                this.startPaintingVisualization();
-            }
-
-        } catch (error) {
-            this.addLog(`描画エラー: ${error.message}`, 'error');
-            this.stopPainting();
-        }
-    }
 
     preparePaintingData() {
         // 黒いドットのみを抽出（白はスキップ）
@@ -1015,12 +985,14 @@ class GhostDrawerApp {
     }
     
     calculateMoveDuration(from, to) {
-        // 移動速度: paintingSpeedに基づいて調整
-        // 標準(2.0)で1秒で100ピクセル、速度に応じて比例調整
-        const distance = Math.sqrt(Math.pow(to.x - from.x, 2) + Math.pow(to.y - from.y, 2));
-        const baseSpeed = 100; // 標準速度で2.0のとき100ピクセル/秒
-        const adjustedSpeed = baseSpeed * (this.paintingSpeed / 2.0);
-        return distance / adjustedSpeed; // 秒
+        // 実機と同じ速度計算: 1ピクセルあたり base_duration × 2 (移動+ニュートラル)
+        // 実機の base_duration = max(50 / speed, 30) ms
+        const baseDuration = Math.max(50 / this.paintingSpeed, 30); // ms
+        const dx = Math.abs(to.x - from.x);
+        const dy = Math.abs(to.y - from.y);
+        const totalPixels = dx + dy; // マンハッタン距離（実機は直線移動ではなくX→Y順に移動）
+        // 各ピクセル移動: base_duration(移動) + base_duration(ニュートラル)
+        return (totalPixels * baseDuration * 2) / 1000; // 秒
     }
     
     calculateRealPaintingTime() {
@@ -1050,7 +1022,7 @@ class GhostDrawerApp {
         return totalTime;
     }
     
-    startPaintingVisualization() {
+    initializePaintingUI() {
         this.currentDotIndex = 0;
         this.currentOperationIndex = 0;
         this.currentDpadCount = 0;
@@ -1059,6 +1031,9 @@ class GhostDrawerApp {
         this.operationStartTime = Date.now();
         this.penState = 'up';
         this.currentPosition = { x: 0, y: 0 };
+
+        // 事前計算された推定時間を保存（安定した初期推定のため）
+        this.preCalculatedEstimate = this.calculateRealPaintingTime();
         
         // 描画キャンバスを初期化
         const paintingCanvas = document.getElementById('paintingCanvas');
@@ -1077,9 +1052,322 @@ class GhostDrawerApp {
         cursor.classList.remove('hidden');
         cursor.classList.add('pen-up');
         cursor.classList.remove('pen-down');
-        
+    }
+
+    updatePaintingProgress(data) {
+        if (!this.isPainting) return;
+
+        const { current, total, x, y, dpad_operations, a_button_presses, is_paint } = data;
+
+        // is_paintがtrueの場合のみキャンバスにドットを描画
+        if (is_paint !== false) {
+            const paintingCanvas = document.getElementById('paintingCanvas');
+            const ctx = paintingCanvas.getContext('2d');
+            ctx.fillStyle = '#000000';
+            ctx.fillRect(x, y, 1, 1);
+        }
+
+        // カーソルを移動（常に更新）
+        const cursor = document.getElementById('paintingCursor');
+        const rect = document.getElementById('paintingCanvas').getBoundingClientRect();
+        const scaleX = rect.width / 320;
+        const scaleY = rect.height / 120;
+
+        cursor.style.left = `${x * scaleX}px`;
+        cursor.style.top = `${y * scaleY}px`;
+
+        // 描画済みドット数を更新（is_paintがtrueの場合のみ）
+        if (is_paint !== false) {
+            document.getElementById('paintedDots').textContent = current.toLocaleString();
+        }
+
+        // 十字キー操作とAボタン押下回数を更新（常に更新）
+        if (dpad_operations !== undefined) {
+            document.getElementById('dpadOperations').textContent = `${dpad_operations.toLocaleString()}/${this.dpadCount.toLocaleString()}回`;
+        }
+        if (a_button_presses !== undefined) {
+            document.getElementById('aButtonPresses').textContent = `${a_button_presses.toLocaleString()}/${this.aButtonCount.toLocaleString()}回`;
+        }
+
+        // 経過時間と残り時間を計算（常に更新）
+        const elapsed = (Date.now() - this.paintingStartTime) / 1000;
+        document.getElementById('elapsedTime').textContent = this.formatTime(elapsed);
+
+        // プログレスバーと残り時間を更新（is_paintがtrueの場合のみ）
+        if (is_paint !== false && current > 0) {
+            const percentage = Math.min((current / total) * 100, 100);
+            const progressFill = document.getElementById('progressFill');
+            const progressText = document.getElementById('progressText');
+
+            if (progressFill) {
+                progressFill.style.width = `${percentage}%`;
+            }
+
+            // ハイブリッド時間推定：事前計算とリアルタイムをブレンド
+            const remainingDots = total - current;
+            let estimatedRemaining;
+
+            if (percentage < 10) {
+                // 最初の10%: 事前計算された推定時間を使用（安定した初期推定）
+                const progressRate = current / total;
+                estimatedRemaining = this.preCalculatedEstimate * (1 - progressRate) - elapsed;
+                estimatedRemaining = Math.max(0, estimatedRemaining); // 負の値を防ぐ
+            } else if (percentage < 30) {
+                // 10-30%: 事前計算とリアルタイム平均をブレンド
+                const blendFactor = (percentage - 10) / 20; // 0.0 -> 1.0
+
+                // 事前計算による推定
+                const progressRate = current / total;
+                const preCalcRemaining = Math.max(0, this.preCalculatedEstimate * (1 - progressRate) - elapsed);
+
+                // リアルタイム平均による推定
+                const averageTimePerDot = elapsed / current;
+                const realTimeRemaining = remainingDots * averageTimePerDot;
+
+                // ブレンド（徐々にリアルタイム推定に移行）
+                estimatedRemaining = preCalcRemaining * (1 - blendFactor) + realTimeRemaining * blendFactor;
+            } else {
+                // 30%以降: リアルタイム平均を使用（十分なサンプルデータ）
+                const averageTimePerDot = elapsed / current;
+                estimatedRemaining = remainingDots * averageTimePerDot;
+            }
+
+            // 推定完了時刻
+            const estimatedCompletion = new Date(Date.now() + estimatedRemaining * 1000);
+            const completionTimeStr = estimatedCompletion.toLocaleTimeString('ja-JP', {
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+
+            // プログレステキストと残り時間表示を更新
+            if (progressText) {
+                progressText.textContent = `${percentage.toFixed(1)}% 完了 (${current}/${total}) - 残り ${this.formatTime(estimatedRemaining)} (完了予定: ${completionTimeStr})`;
+            }
+
+            // 推定時間表示も更新（全体の推定時間）
+            const totalEstimatedTime = elapsed + estimatedRemaining;
+            document.getElementById('estimatedTime').textContent = this.formatTime(totalEstimatedTime);
+        }
+    }
+
+    showPaintPrepareModal(useDevice) {
+        if (!this.currentBinaryData) return;
+
+        const isConnected = this.isServerConnected && this.isHardwareConnected;
+
+        if (useDevice && !isConnected) {
+            alert('実機が接続されていません。');
+            return;
+        }
+
+        if (!useDevice && !isConnected) {
+            if (!confirm('実機が接続されていません。シミュレーションモードで開始しますか？')) {
+                return;
+            }
+        }
+
+        // useDeviceを保存
+        this.pendingPaintUseDevice = useDevice;
+
+        // キャリブレーション設定を表示
+        this.updatePaintPrepareModalValues();
+
+        // モーダルを表示
+        const modal = document.getElementById('paintPrepareModal');
+        modal?.classList.remove('hidden');
+        modal?.classList.add('flex');
+    }
+
+    closePaintPrepareModal() {
+        const modal = document.getElementById('paintPrepareModal');
+        modal?.classList.add('hidden');
+        modal?.classList.remove('flex');
+        this.pendingPaintUseDevice = null;
+    }
+
+    updatePaintPrepareModalValues() {
+        // CalibrationManagerから現在の値を取得
+        if (window.calibrationManager) {
+            const speedValue = parseInt(window.calibrationManager.speedInput?.value || 100);
+            const displaySpeed = speedValue / 100.0;
+            const timing = window.calibrationManager.getTimingValues();
+
+            document.getElementById('currentCalibrationSpeed').textContent = `${displaySpeed.toFixed(1)}x`;
+            document.getElementById('currentCalibrationPress').textContent = `${timing.pressMs}ms`;
+            document.getElementById('currentCalibrationRelease').textContent = `${timing.releaseMs}ms`;
+            document.getElementById('currentCalibrationWait').textContent = `${timing.waitMs}ms`;
+        }
+    }
+
+    async executePainting(useDevice) {
+        if (!this.currentBinaryData) return;
+
+        const isConnected = this.isServerConnected && this.isHardwareConnected;
+        const isDevicePainting = useDevice !== null ? useDevice : isConnected;
+
+        if (isDevicePainting && !isConnected) {
+            alert('実機が接続されていません。');
+            return;
+        }
+
+        this.isPainting = true;
+        this.updateButtonStates();
+
+        // 描画データを準備
+        this.preparePaintingData();
+
+        // 描画進捗エリアを表示
+        document.getElementById('paintingProgress').classList.remove('hidden');
+        this.hideProgress();
+
+        // 進捗バーを表示
+        const progressContainer = document.getElementById('progressContainer');
+        if (progressContainer) {
+            progressContainer.classList.remove('hidden');
+        }
+
+        // シミュレーションの場合は倍速コントロールと進捗スライダーを表示
+        if (!isDevicePainting) {
+            document.getElementById('simulationSpeedControl').classList.remove('hidden');
+            document.getElementById('progressSliderControl').classList.remove('hidden');
+            // 進捗スライダーをリセット
+            document.getElementById('progressSlider').value = 0;
+            document.getElementById('progressSliderValue').textContent = '0%';
+        } else {
+            document.getElementById('simulationSpeedControl').classList.add('hidden');
+            document.getElementById('progressSliderControl').classList.add('hidden');
+        }
+
+        try {
+            if (isDevicePainting) {
+                // 実際の描画 - タイミング値を使用
+                const timing = window.calibrationManager ? window.calibrationManager.getTimingValues() : {
+                    pressMs: 100,
+                    releaseMs: 60,
+                    waitMs: 40
+                };
+
+                this.addLog(`Nintendo Switchで描画を開始します... (設定: ${timing.pressMs}+${timing.releaseMs}+${timing.waitMs}ms/px)`, 'info');
+
+                // UI初期化
+                this.initializePaintingUI();
+
+                const response = await fetch(`/api/artworks/${this.currentArtworkId}/paint`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        press_ms: timing.pressMs,
+                        release_ms: timing.releaseMs,
+                        wait_ms: timing.waitMs,
+                        preview: false
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`描画エラー: ${response.status}`);
+                }
+
+                // WebSocketで進捗を監視するため、ここでは何もしない
+                // updatePaintingProgress が呼ばれるのを待つ
+            } else {
+                // シミュレーション
+                this.addLog(`描画シミュレーションを開始します...`, 'info');
+                this.startPaintingVisualization();
+            }
+
+        } catch (error) {
+            this.addLog(`描画エラー: ${error.message}`, 'error');
+            this.stopPainting();
+        }
+    }
+
+    startPaintingVisualization() {
+        this.initializePaintingUI();
+
         // 描画を開始
         this.executeNextOperation();
+    }
+
+    async startPainting(useDevice = null) {
+        if (!this.currentBinaryData) return;
+        
+        const isConnected = this.isServerConnected && this.isHardwareConnected;
+                            
+        let isDevicePainting;
+        if (useDevice !== null) {
+            isDevicePainting = useDevice;
+        } else {
+            isDevicePainting = isConnected;
+        }
+        
+        if (isDevicePainting && !isConnected) {
+            alert('実機が接続されていません。');
+            return;
+        }
+        
+        if (!isDevicePainting && useDevice === null && !confirm('実機が接続されていません。シミュレーションモードで開始しますか？')) {
+            return;
+        }
+        
+        this.isPainting = true;
+        this.updateButtonStates();
+        
+        // 描画データを準備
+        this.preparePaintingData();
+        
+        // 描画進捗エリアを表示
+        document.getElementById('paintingProgress').classList.remove('hidden');
+        this.hideProgress();
+        
+        // シミュレーションの場合は倍速コントロールと進捗スライダーを表示
+        if (!isDevicePainting) {
+            document.getElementById('simulationSpeedControl').classList.remove('hidden');
+            document.getElementById('progressSliderControl').classList.remove('hidden');
+            // 進捗スライダーをリセット
+            document.getElementById('progressSlider').value = 0;
+            document.getElementById('progressSliderValue').textContent = '0%';
+        } else {
+            document.getElementById('simulationSpeedControl').classList.add('hidden');
+            document.getElementById('progressSliderControl').classList.add('hidden');
+        }
+
+        try {
+            if (isDevicePainting) {
+                // 実際の描画
+                this.addLog(`Nintendo Switchで描画を開始します... (速度: ${this.paintingSpeed.toFixed(1)}ドット/秒)`, 'info');
+                
+                // UI初期化
+                this.initializePaintingUI();
+
+                const response = await fetch(`/api/artworks/${this.currentArtworkId}/paint`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        speed: this.paintingSpeed,
+                        preview: false
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`描画エラー: ${response.status}`);
+                }
+                
+                // WebSocketで進捗を監視するため、ここでは何もしない
+                // updatePaintingProgress が呼ばれるのを待つ
+            } else {
+                // シミュレーション
+                this.addLog(`描画シミュレーションを開始します... (速度: ${this.paintingSpeed.toFixed(1)}ドット/秒)`, 'info');
+                this.startPaintingVisualization();
+            }
+
+        } catch (error) {
+            this.addLog(`描画エラー: ${error.message}`, 'error');
+            this.stopPainting();
+        }
     }
     
     executeNextOperation() {
@@ -1167,27 +1455,46 @@ class GhostDrawerApp {
         const rect = paintingCanvas.getBoundingClientRect();
         const scaleX = rect.width / 320;
         const scaleY = rect.height / 120;
-        
+
         const startTime = Date.now();
         const animationDuration = (duration * 1000) / this.simulationMultiplier;
-        
+
+        // 前回のフレームの位置を記録（ペンが下がっている場合の軌跡描画用）
+        let lastX = from.x;
+        let lastY = from.y;
+
         const animate = () => {
             if (!this.isPainting || this.isPaused) return;
-            
+
             const elapsed = Date.now() - startTime;
             const progress = Math.min(elapsed / animationDuration, 1);
-            
+
             // 線形補間
             const currentX = from.x + (to.x - from.x) * progress;
             const currentY = from.y + (to.y - from.y) * progress;
-            
+
+            // ペンが下がっている場合は移動軌跡を描画
+            if (this.penState === 'down') {
+                const ctx = paintingCanvas.getContext('2d');
+                ctx.strokeStyle = '#000000';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(lastX, lastY);
+                ctx.lineTo(currentX, currentY);
+                ctx.stroke();
+            }
+
+            // 次のフレーム用に位置を更新
+            lastX = currentX;
+            lastY = currentY;
+
             // カーソル位置を更新
             cursor.style.left = `${currentX * scaleX}px`;
             cursor.style.top = `${currentY * scaleY}px`;
-            
+
             // 現在位置を更新
             this.currentPosition = { x: currentX, y: currentY };
-            
+
             if (progress < 1) {
                 requestAnimationFrame(animate);
             } else {
@@ -1195,7 +1502,7 @@ class GhostDrawerApp {
                 callback();
             }
         };
-        
+
         animate();
     }
     
@@ -1249,20 +1556,35 @@ class GhostDrawerApp {
         this.isPainting = false;
         this.isProcessing = false;
         this.updateButtonStates();
-        
+
         const totalTime = (Date.now() - this.paintingStartTime) / 1000;
         this.addLog(`描画が完了しました（実行時間: ${this.formatTime(totalTime)}）`, 'success');
-        
-        // 描画進捗エリアを少し表示してから隠す
+
+        // 描画進捗エリアと進捗バーを少し表示してから隠す
         setTimeout(() => {
             document.getElementById('paintingProgress').classList.add('hidden');
+            const progressContainer = document.getElementById('progressContainer');
+            if (progressContainer) {
+                progressContainer.classList.add('hidden');
+            }
         }, 3000);
     }
     
-    togglePausePainting() {
+    async togglePausePainting() {
         if (!this.isPainting) return;
         
         this.isPaused = !this.isPaused;
+
+        // Call backend to pause/resume if connected to hardware
+        if (this.isHardwareConnected) {
+            try {
+                await fetch('/api/painting/pause', { method: 'POST' });
+            } catch (e) {
+                console.error('Failed to pause/resume painting on backend:', e);
+                this.addLog(`バックエンドの一時停止/再開に失敗しました: ${e.message}`, 'error');
+            }
+        }
+
         const pauseButton = document.getElementById('pausePaintingButton');
         
         if (this.isPaused) {
@@ -1292,9 +1614,19 @@ class GhostDrawerApp {
         }
     }
     
-    stopPainting() {
+    async stopPainting() {
         if (!this.isPainting) return;
         
+        // Call backend to stop if connected to hardware
+        if (this.isHardwareConnected) {
+            try {
+                await fetch('/api/painting/stop', { method: 'POST' });
+            } catch (e) {
+                console.error('Failed to stop painting on backend:', e);
+                this.addLog(`バックエンドの停止に失敗しました: ${e.message}`, 'error');
+            }
+        }
+
         this.isPainting = false;
         this.isPaused = false;
         this.isProcessing = false;
@@ -1302,10 +1634,14 @@ class GhostDrawerApp {
         this.currentOperationIndex = 0;
         this.currentDpadCount = 0;
         this.currentAButtonCount = 0;
-        
+
         // UIをリセット
         document.getElementById('paintingProgress').classList.add('hidden');
         document.getElementById('paintingCursor').classList.add('hidden');
+        const progressContainer = document.getElementById('progressContainer');
+        if (progressContainer) {
+            progressContainer.classList.add('hidden');
+        }
         this.updateButtonStates();
         
         const pauseButton = document.getElementById('pausePaintingButton');
@@ -2037,6 +2373,12 @@ class GhostDrawerApp {
                 processedData.height
             );
             
+            if (dots.length === 0) {
+                this.addLog('ドットが検出されませんでした。閾値を調整してください。', 'warning');
+                this.displayProcessedCanvas(processedData.canvas);
+                return;
+            }
+            
             this.addLog(`プレビュー更新完了: ${dots.length}個の描画ドット`, 'info');
             
             // 変換後の画像を表示
@@ -2102,4 +2444,333 @@ window.addEventListener('unhandledrejection', (event) => {
     if (window.ghostDrawerApp) {
         window.ghostDrawerApp.addLog(`Promise エラー: ${event.reason}`, 'error');
     }
+});
+
+// ============================================
+// 速度キャリブレーション機能
+// ============================================
+
+class CalibrationManager {
+    constructor() {
+        this.modal = document.getElementById('calibrationModal');
+        this.openButton = document.getElementById('openCalibrationButton');
+        this.closeButton = document.getElementById('closeCalibrationButton');
+        this.cancelButton = document.getElementById('cancelCalibrationButton');
+        this.runButton = document.getElementById('runCalibrationButton');
+        this.stopButton = document.getElementById('stopCalibrationButton');
+        this.applyAndStartButton = document.getElementById('applyAndStartPaintingButton');
+
+        // 速度スライダー（統合版）
+        this.speedInput = document.getElementById('speedInput');
+        this.speedValue = document.getElementById('speedValue');
+        this.skipInitCheckbox = document.getElementById('skipInitializationCheckbox');
+
+        this.isRunning = false;
+
+        this.initEventListeners();
+        this.updateValues(); // 初期値を設定
+    }
+
+    initEventListeners() {
+        // モーダル開閉
+        this.openButton?.addEventListener('click', () => this.openModal());
+        this.closeButton?.addEventListener('click', () => this.closeModal());
+        this.cancelButton?.addEventListener('click', () => this.closeModal());
+
+        // 速度スライダー変更
+        this.speedInput?.addEventListener('input', () => this.updateValues());
+
+        // テスト実行と停止
+        this.runButton?.addEventListener('click', () => this.runCalibration());
+        this.stopButton?.addEventListener('click', () => this.stopCalibration());
+
+        // 設定して描画開始ボタン
+        this.applyAndStartButton?.addEventListener('click', () => this.applyAndStartPainting());
+
+        // モーダル外クリックで閉じる
+        this.modal?.addEventListener('click', (e) => {
+            if (e.target === this.modal) {
+                this.closeModal();
+            }
+        });
+    }
+
+    openModal() {
+        this.modal?.classList.remove('hidden');
+        this.modal?.classList.add('flex');
+        this.updateButtonStates();
+    }
+
+    closeModal() {
+        // モーダルを閉じる際、テスト実行中なら停止処理を行う
+        if (this.isRunning) {
+            this.stopCalibration();
+        }
+        this.modal?.classList.add('hidden');
+        this.modal?.classList.remove('flex');
+    }
+
+    updateValues() {
+        // 速度スライダーの値を取得（50〜200、デフォルト100）
+        const speedValue = parseInt(this.speedInput?.value || 100);
+
+        // speedValueは描画速度を表す（大きい = 速い）
+        // speedMultiplierはタイミング倍率を表す（大きい = 遅い）
+        // 反比例関係: speedMultiplier = 10000 / (speedValue * 100)
+        const speedMultiplier = 10000 / (speedValue * 100);
+
+        // 基準値（1.0xの場合、200ms/px）
+        const basePressMs = 100;
+        const baseReleaseMs = 60;
+        const baseWaitMs = 40;
+
+        // 速度倍率から各タイミング値を計算
+        const pressMs = Math.round(basePressMs * speedMultiplier);
+        const releaseMs = Math.round(baseReleaseMs * speedMultiplier);
+        const waitMs = Math.round(baseWaitMs * speedMultiplier);
+
+        // 速度表示を更新（スライダー値を100で割った値を表示）
+        const displaySpeed = speedValue / 100.0;
+        if (this.speedValue) {
+            this.speedValue.textContent = `${displaySpeed.toFixed(1)}x`;
+        }
+    }
+
+    // 計算されたタイミング値を取得するヘルパーメソッド
+    getTimingValues() {
+        const speedValue = parseInt(this.speedInput?.value || 100);
+
+        // speedValueは描画速度を表す（大きい = 速い）
+        // speedMultiplierはタイミング倍率を表す（大きい = 遅い）
+        // 反比例関係: speedMultiplier = 10000 / (speedValue * 100)
+        const speedMultiplier = 10000 / (speedValue * 100);
+
+        // 基準値（1.0xの場合、200ms/px）
+        const basePressMs = 100;
+        const baseReleaseMs = 60;
+        const baseWaitMs = 40;
+
+        return {
+            pressMs: Math.round(basePressMs * speedMultiplier),
+            releaseMs: Math.round(baseReleaseMs * speedMultiplier),
+            waitMs: Math.round(baseWaitMs * speedMultiplier)
+        };
+    }
+
+    updateButtonStates() {
+        if (this.isRunning) {
+            // テスト実行中: 停止ボタンを表示、実行ボタンを非表示
+            this.runButton?.classList.add('hidden');
+            this.stopButton?.classList.remove('hidden');
+        } else {
+            // アイドル状態: 実行ボタンを表示、停止ボタンを非表示
+            this.runButton?.classList.remove('hidden');
+            this.stopButton?.classList.add('hidden');
+        }
+    }
+
+    async runCalibration() {
+        const { pressMs, releaseMs, waitMs } = this.getTimingValues();
+        const skipInit = this.skipInitCheckbox?.checked || false;
+
+        console.log('Starting calibration with params:', { pressMs, releaseMs, waitMs, skipInit });
+
+        try {
+            const response = await fetch('/api/calibration/start', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    press_ms: pressMs,
+                    release_ms: releaseMs,
+                    wait_ms: waitMs,
+                    skip_initialization: skipInit
+                })
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                this.isRunning = true;
+                this.updateButtonStates();
+
+                if (window.ghostDrawerApp) {
+                    window.ghostDrawerApp.addLog(`キャリブレーションテスト開始: ${pressMs}+${releaseMs}+${waitMs}ms/pixel`, 'info');
+                }
+
+                // モーダルは閉じない
+            } else {
+                console.error('Calibration failed:', result);
+                if (window.ghostDrawerApp) {
+                    window.ghostDrawerApp.addLog('キャリブレーションテストの開始に失敗しました', 'error');
+                }
+            }
+        } catch (error) {
+            console.error('Calibration error:', error);
+            if (window.ghostDrawerApp) {
+                window.ghostDrawerApp.addLog(`キャリブレーションエラー: ${error.message}`, 'error');
+            }
+        }
+    }
+
+    async stopCalibration() {
+        console.log('Stopping calibration...');
+
+        try {
+            const response = await fetch('/api/painting/stop', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                this.isRunning = false;
+                this.updateButtonStates();
+
+                if (window.ghostDrawerApp) {
+                    window.ghostDrawerApp.addLog('キャリブレーションテストを停止しました', 'info');
+                }
+            } else {
+                console.error('Stop calibration failed:', result);
+                if (window.ghostDrawerApp) {
+                    window.ghostDrawerApp.addLog('キャリブレーションテストの停止に失敗しました', 'warning');
+                }
+            }
+        } catch (error) {
+            console.error('Stop calibration error:', error);
+            if (window.ghostDrawerApp) {
+                window.ghostDrawerApp.addLog(`停止エラー: ${error.message}`, 'error');
+            }
+        }
+    }
+
+    /**
+     * キャリブレーション完了通知を処理
+     * WebSocketから呼び出される
+     */
+    handleCalibrationComplete(data) {
+        console.log('Calibration complete notification received:', data);
+
+        // 実行中フラグをリセット
+        this.isRunning = false;
+        this.updateButtonStates();
+
+        // ステータスに応じたログメッセージ（既にdebug.jsで追加されているため不要）
+        // if (window.ghostDrawerApp) {
+        //     const logLevel = data.status === 'success' ? 'info' : data.status === 'error' ? 'error' : 'warning';
+        //     window.ghostDrawerApp.addLog(data.message, logLevel);
+        // }
+    }
+
+    async runPaintMoveTest() {
+        const { pressMs, releaseMs, waitMs } = this.getTimingValues();
+
+        console.log('Starting paint move test with params:', { pressMs, releaseMs, waitMs });
+
+        try {
+            const response = await fetch('/api/calibration/test/paint-move', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    press_ms: pressMs,
+                    release_ms: releaseMs,
+                    wait_ms: waitMs
+                })
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                this.isRunning = true;
+                this.updateButtonStates();
+
+                if (window.ghostDrawerApp) {
+                    window.ghostDrawerApp.addLog(`描画移動テスト開始: ${pressMs}+${releaseMs}+${waitMs}ms/pixel`, 'info');
+                }
+            } else {
+                console.error('Paint move test failed:', result);
+                if (window.ghostDrawerApp) {
+                    window.ghostDrawerApp.addLog('描画移動テストの開始に失敗しました', 'error');
+                }
+            }
+        } catch (error) {
+            console.error('Paint move test error:', error);
+            if (window.ghostDrawerApp) {
+                window.ghostDrawerApp.addLog(`描画移動テストエラー: ${error.message}`, 'error');
+            }
+        }
+    }
+
+    async runGapMoveTest() {
+        const { pressMs, releaseMs, waitMs } = this.getTimingValues();
+
+        console.log('Starting gap move test with params:', { pressMs, releaseMs, waitMs });
+
+        try {
+            const response = await fetch('/api/calibration/test/gap-move', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    press_ms: pressMs,
+                    release_ms: releaseMs,
+                    wait_ms: waitMs
+                })
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                this.isRunning = true;
+                this.updateButtonStates();
+
+                if (window.ghostDrawerApp) {
+                    window.ghostDrawerApp.addLog(`空白移動テスト開始: ${pressMs}+${releaseMs}+${waitMs}ms/pixel`, 'info');
+                }
+            } else {
+                console.error('Gap move test failed:', result);
+                if (window.ghostDrawerApp) {
+                    window.ghostDrawerApp.addLog('空白移動テストの開始に失敗しました', 'error');
+                }
+            }
+        } catch (error) {
+            console.error('Gap move test error:', error);
+            if (window.ghostDrawerApp) {
+                window.ghostDrawerApp.addLog(`空白移動テストエラー: ${error.message}`, 'error');
+            }
+        }
+    }
+
+    applyAndStartPainting() {
+        // キャリブレーションモーダルを閉じる
+        this.closeModal();
+
+        // GhostDrawerAppが存在し、executePaintingメソッドが利用可能な場合
+        if (window.ghostDrawerApp && typeof window.ghostDrawerApp.executePainting === 'function') {
+            // 描画準備モーダルも閉じる
+            if (window.ghostDrawerApp.closePaintPrepareModal) {
+                window.ghostDrawerApp.closePaintPrepareModal();
+            }
+
+            // ハードウェアの接続状態を確認
+            const isConnected = window.ghostDrawerApp.isServerConnected && window.ghostDrawerApp.isHardwareConnected;
+
+            // 接続されていれば実機、そうでなければシミュレーションで描画を開始
+            window.ghostDrawerApp.executePainting(isConnected);
+        } else {
+            console.error('GhostDrawerApp or executePainting method is not available');
+        }
+    }
+}
+
+// 初期化
+document.addEventListener('DOMContentLoaded', () => {
+    window.calibrationManager = new CalibrationManager();
 }); 

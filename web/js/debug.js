@@ -33,7 +33,27 @@ class DebugManager {
             this.ws.onmessage = (event) => {
                 try {
                     const logData = JSON.parse(event.data);
-                    this.addLogFromBackend(logData);
+
+                    if (logData.type === 'progress') {
+                        if (window.ghostDrawerApp && typeof window.ghostDrawerApp.updatePaintingProgress === 'function') {
+                            window.ghostDrawerApp.updatePaintingProgress(logData);
+                        }
+                    } else if (logData.type === 'calibration_complete') {
+                        // キャリブレーション完了通知を処理
+                        if (window.calibrationManager) {
+                            window.calibrationManager.handleCalibrationComplete(logData);
+                        }
+                        // ログとしても表示
+                        this.addLogFromBackend({
+                            type: 'log',
+                            timestamp: logData.timestamp,
+                            level: logData.status === 'success' ? 'INFO' : logData.status === 'error' ? 'ERROR' : 'WARN',
+                            message: logData.message,
+                            target: 'calibration'
+                        });
+                    } else {
+                        this.addLogFromBackend(logData);
+                    }
                 } catch (e) {
                     console.error('ログデータの解析に失敗:', e);
                 }
