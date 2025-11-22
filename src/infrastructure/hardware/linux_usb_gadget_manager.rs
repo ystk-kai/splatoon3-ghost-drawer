@@ -7,8 +7,8 @@ use std::process::Command;
 use tracing::{debug, error, info, warn};
 
 const GADGET_PATH: &str = "/sys/kernel/config/usb_gadget/nintendo_controller";
-const VID: &str = "0x057e"; // Nintendo
-const PID: &str = "0x2009"; // Pro Controller
+const VID: &str = "0x0f0d"; // HORI CO., LTD.
+const PID: &str = "0x0092"; // Pokken Tournament DX Pro Pad
 
 pub struct LinuxUsbGadgetManager;
 
@@ -143,13 +143,22 @@ impl LinuxUsbGadgetManager {
             if Path::new(&hid_path).exists() {
                 info!("Found HID device: {}", hid_path);
 
-                // Change ownership to current user
-                if let Ok(uid) = std::env::var("SUDO_UID") {
-                    if let Ok(gid) = std::env::var("SUDO_GID") {
+                // Change ownership to splatoon3 user/group
+                // Since this runs as root (systemd service), we can't rely on SUDO_UID
+                // We'll try to find the splatoon3 user/group ID
+                
+                let uid_output = Command::new("id").args(["-u", "splatoon3"]).output();
+                let gid_output = Command::new("id").args(["-g", "splatoon3"]).output();
+                
+                if let (Ok(uid_out), Ok(gid_out)) = (uid_output, gid_output) {
+                    if uid_out.status.success() && gid_out.status.success() {
+                        let uid = String::from_utf8_lossy(&uid_out.stdout).trim().to_string();
+                        let gid = String::from_utf8_lossy(&gid_out.stdout).trim().to_string();
+                        
                         info!("Setting permissions for {} to {}:{}", hid_path, uid, gid);
 
                         let output = Command::new("chown")
-                            .arg(format!("{uid}:{gid}"))
+                            .arg(format!("{}:{}", uid, gid))
                             .arg(&hid_path)
                             .output()
                             .map_err(|e| {
@@ -160,7 +169,11 @@ impl LinuxUsbGadgetManager {
                             let stderr = String::from_utf8_lossy(&output.stderr);
                             warn!("Failed to change ownership of {}: {}", hid_path, stderr);
                         }
+                    } else {
+                        warn!("Could not find splatoon3 user/group IDs");
                     }
+                } else {
+                    warn!("Failed to execute id command");
                 }
 
                 // Set permissions to read/write for owner and group
@@ -288,114 +301,62 @@ impl UsbGadgetManager for LinuxUsbGadgetManager {
         self.create_directory(&hid_dir)?;
         self.write_file(&format!("{hid_dir}/protocol"), "0")?;
         self.write_file(&format!("{hid_dir}/subclass"), "0")?;
-        self.write_file(&format!("{hid_dir}/report_length"), "64")?;
+        self.write_file(&format!("{hid_dir}/report_length"), "8")?;
 
         // Write HID report descriptor for Nintendo Pro Controller
         // This is the actual descriptor used by the Pro Controller
+
+
+    // ... (inside configure_as_pro_controller)
+
+        // Set USB version
+        self.write_file(&format!("{GADGET_PATH}/bcdUSB"), "0x0200")?; // USB 2.0
+        self.write_file(&format!("{GADGET_PATH}/bcdDevice"), "0x0100")?;
+
+        // ...
+
+        // Write HID report descriptor for Pokken Tournament DX Pro Pad
         let report_desc = vec![
             0x05, 0x01, // Usage Page (Generic Desktop Ctrls)
-            0x15, 0x00, // Logical Minimum (0)
-            0x09, 0x04, // Usage (Joystick)
+            0x09, 0x05, // Usage (Game Pad)
             0xA1, 0x01, // Collection (Application)
-            0x85, 0x30, //   Report ID (48)
-            0x05, 0x01, //   Usage Page (Generic Desktop Ctrls)
+            0x15, 0x00, //   Logical Minimum (0)
+            0x25, 0x01, //   Logical Maximum (1)
+            0x35, 0x00, //   Physical Minimum (0)
+            0x45, 0x01, //   Physical Maximum (1)
+            0x75, 0x01, //   Report Size (1)
+            0x95, 0x10, //   Report Count (16)
             0x05, 0x09, //   Usage Page (Button)
             0x19, 0x01, //   Usage Minimum (0x01)
-            0x29, 0x0A, //   Usage Maximum (0x0A)
-            0x15, 0x00, //   Logical Minimum (0)
-            0x25, 0x01, //   Logical Maximum (1)
-            0x75, 0x01, //   Report Size (1)
-            0x95, 0x0A, //   Report Count (10)
-            0x55, 0x00, //   Unit Exponent (0)
-            0x65, 0x00, //   Unit (None)
-            0x81,
-            0x02, //   Input (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)
-            0x05, 0x09, //   Usage Page (Button)
-            0x19, 0x0B, //   Usage Minimum (0x0B)
-            0x29, 0x0E, //   Usage Maximum (0x0E)
-            0x15, 0x00, //   Logical Minimum (0)
-            0x25, 0x01, //   Logical Maximum (1)
-            0x75, 0x01, //   Report Size (1)
-            0x95, 0x04, //   Report Count (4)
-            0x81,
-            0x02, //   Input (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)
-            0x75, 0x01, //   Report Size (1)
-            0x95, 0x02, //   Report Count (2)
-            0x81,
-            0x03, //   Input (Const,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)
-            0x0B, 0x01, 0x00, 0x01, 0x00, //   Usage (0x010001)
-            0xA1, 0x00, //   Collection (Physical)
-            0x0B, 0x30, 0x00, 0x01, 0x00, //     Usage (0x010030)
-            0x0B, 0x31, 0x00, 0x01, 0x00, //     Usage (0x010031)
-            0x0B, 0x32, 0x00, 0x01, 0x00, //     Usage (0x010032)
-            0x0B, 0x35, 0x00, 0x01, 0x00, //     Usage (0x010035)
-            0x15, 0x00, //     Logical Minimum (0)
-            0x27, 0xFF, 0xFF, 0x00, 0x00, //     Logical Maximum (65534)
-            0x75, 0x10, //     Report Size (16)
-            0x95, 0x04, //     Report Count (4)
-            0x81,
-            0x02, //     Input (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)
-            0xC0, //   End Collection
-            0x0B, 0x39, 0x00, 0x01, 0x00, //   Usage (0x010039)
-            0x15, 0x00, //   Logical Minimum (0)
+            0x29, 0x10, //   Usage Maximum (0x10)
+            0x81, 0x02, //   Input (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)
+            0x05, 0x01, //   Usage Page (Generic Desktop Ctrls)
             0x25, 0x07, //   Logical Maximum (7)
-            0x35, 0x00, //   Physical Minimum (0)
             0x46, 0x3B, 0x01, //   Physical Maximum (315)
-            0x65, 0x14, //   Unit (System: English Rotation, Length: Centimeter)
             0x75, 0x04, //   Report Size (4)
             0x95, 0x01, //   Report Count (1)
-            0x81,
-            0x02, //   Input (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)
-            0x05, 0x09, //   Usage Page (Button)
-            0x19, 0x0F, //   Usage Minimum (0x0F)
-            0x29, 0x12, //   Usage Maximum (0x12)
-            0x15, 0x00, //   Logical Minimum (0)
-            0x25, 0x01, //   Logical Maximum (1)
-            0x75, 0x01, //   Report Size (1)
+            0x65, 0x14, //   Unit (System: English Rotation, Length: Centimeter)
+            0x09, 0x39, //   Usage (Hat Switch)
+            0x81, 0x42, //   Input (Data,Var,Abs,No Wrap,Linear,Preferred State,Null State)
+            0x65, 0x00, //   Unit (None)
+            0x95, 0x01, //   Report Count (1)
+            0x81, 0x01, //   Input (Const,Array,Abs,No Wrap,Linear,Preferred State,No Null Position)
+            0x26, 0xFF, 0x00, //   Logical Maximum (255)
+            0x46, 0xFF, 0x00, //   Physical Maximum (255)
+            0x09, 0x30, //   Usage (X)
+            0x09, 0x31, //   Usage (Y)
+            0x09, 0x32, //   Usage (Z)
+            0x09, 0x35, //   Usage (Rz)
+            0x75, 0x08, //   Report Size (8)
             0x95, 0x04, //   Report Count (4)
-            0x81,
-            0x02, //   Input (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)
-            0x75, 0x08, //   Report Size (8)
-            0x95, 0x34, //   Report Count (52)
-            0x81,
-            0x03, //   Input (Const,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)
+            0x81, 0x02, //   Input (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)
             0x06, 0x00, 0xFF, //   Usage Page (Vendor Defined 0xFF00)
-            0x85, 0x21, //   Report ID (33)
-            0x09, 0x01, //   Usage (0x01)
-            0x75, 0x08, //   Report Size (8)
-            0x95, 0x3F, //   Report Count (63)
-            0x81,
-            0x03, //   Input (Const,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)
-            0x85, 0x81, //   Report ID (-127)
-            0x09, 0x02, //   Usage (0x02)
-            0x75, 0x08, //   Report Size (8)
-            0x95, 0x3F, //   Report Count (63)
-            0x81,
-            0x03, //   Input (Const,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)
-            0x85, 0x01, //   Report ID (1)
-            0x09, 0x03, //   Usage (0x03)
-            0x75, 0x08, //   Report Size (8)
-            0x95, 0x3F, //   Report Count (63)
-            0x91,
-            0x83, //   Output (Const,Var,Abs,No Wrap,Linear,Preferred State,No Null Position,Volatile)
-            0x85, 0x10, //   Report ID (16)
-            0x09, 0x04, //   Usage (0x04)
-            0x75, 0x08, //   Report Size (8)
-            0x95, 0x3F, //   Report Count (63)
-            0x91,
-            0x83, //   Output (Const,Var,Abs,No Wrap,Linear,Preferred State,No Null Position,Volatile)
-            0x85, 0x80, //   Report ID (-128)
-            0x09, 0x05, //   Usage (0x05)
-            0x75, 0x08, //   Report Size (8)
-            0x95, 0x3F, //   Report Count (63)
-            0x91,
-            0x83, //   Output (Const,Var,Abs,No Wrap,Linear,Preferred State,No Null Position,Volatile)
-            0x85, 0x82, //   Report ID (-126)
-            0x09, 0x06, //   Usage (0x06)
-            0x75, 0x08, //   Report Size (8)
-            0x95, 0x3F, //   Report Count (63)
-            0x91,
-            0x83, //   Output (Const,Var,Abs,No Wrap,Linear,Preferred State,No Null Position,Volatile)
+            0x09, 0x20, //   Usage (0x20)
+            0x95, 0x01, //   Report Count (1)
+            0x81, 0x02, //   Input (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)
+            0x0A, 0x21, 0x26, //   Usage (0x2621)
+            0x95, 0x08, //   Report Count (8)
+            0x91, 0x02, //   Output (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position,Non-volatile)
             0xC0, // End Collection
         ];
 
@@ -432,6 +393,69 @@ impl UsbGadgetManager for LinuxUsbGadgetManager {
 
         // Wait for HID device to be created
         std::thread::sleep(std::time::Duration::from_millis(1000));
+
+        // Robustly ensure /dev/hidg0 exists and is a character device
+        let hidg0_path = Path::new("/dev/hidg0");
+        let needs_recreation = if !hidg0_path.exists() {
+            true
+        } else {
+            // Check if it is a character device
+            match fs::metadata(hidg0_path) {
+                Ok(metadata) => {
+                    use std::os::unix::fs::FileTypeExt;
+                    !metadata.file_type().is_char_device()
+                }
+                Err(_) => true,
+            }
+        };
+
+        if needs_recreation {
+            warn!("/dev/hidg0 missing or not a character device. Attempting manual creation...");
+            
+            // Clean up if it exists (as directory or file)
+            if hidg0_path.exists() {
+                if hidg0_path.is_dir() {
+                    if let Err(e) = fs::remove_dir_all(hidg0_path) {
+                        error!("Failed to remove directory /dev/hidg0: {}", e);
+                        // Try with command as fallback
+                        let _ = Command::new("rm").args(["-rf", "/dev/hidg0"]).output();
+                    }
+                } else {
+                    let _ = fs::remove_file("/dev/hidg0");
+                }
+            }
+            
+            // Create device node manually: mknod /dev/hidg0 c 236 0
+            // Note: Major number 236 is typical for HID gadget, but dynamic.
+            // Ideally we should read it from /sys/kernel/config/usb_gadget/nintendo_controller/functions/hid.usb0/dev
+            // Format is "Major:Minor" e.g. "236:0"
+            
+            let dev_path = format!("{hid_dir}/dev");
+            let (major, minor) = if let Ok(dev_content) = fs::read_to_string(&dev_path) {
+                let parts: Vec<&str> = dev_content.trim().split(':').collect();
+                if parts.len() == 2 {
+                    (parts[0].to_string(), parts[1].to_string())
+                } else {
+                    error!("Invalid format in {}: {}", dev_path, dev_content);
+                    ("236".to_string(), "0".to_string())
+                }
+            } else {
+                error!("Could not read device number from {}", dev_path);
+                ("236".to_string(), "0".to_string())
+            };
+
+            info!("Creating /dev/hidg0 with major {} and minor {}", major, minor);
+            
+            let output = Command::new("mknod")
+                .args(["/dev/hidg0", "c", &major, &minor])
+                .output()
+                .map_err(|e| SetupError::Unknown(format!("Failed to run mknod: {e}")))?;
+                
+            if !output.status.success() {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                error!("Failed to create /dev/hidg0: {}", stderr);
+            }
+        }
 
         // Set appropriate permissions for HID device
         self.configure_hid_permissions()?;

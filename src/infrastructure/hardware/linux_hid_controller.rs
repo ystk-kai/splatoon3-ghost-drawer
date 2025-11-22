@@ -26,7 +26,8 @@ struct ProControllerState {
 impl Default for ProControllerState {
     fn default() -> Self {
         Self {
-            buttons: 0,
+            // Initialize buttons with DPad Neutral (0x08 shifted by 16)
+            buttons: (DPad::NEUTRAL.value() as u32) << 16,
             left_stick_x: 0x80,  // 中央値 (128)
             left_stick_y: 0x80,  // 中央値 (128)
             right_stick_x: 0x80, // 中央値 (128)
@@ -73,44 +74,61 @@ impl LinuxHidController {
         if let Some(path) = device_path.as_ref() {
             let state = self.current_state.lock().unwrap();
 
-            // Pro Controller標準入力レポート (64バイト)
-            let mut report = [0u8; 64];
+            // Pokken Controller Report (8 bytes)
+            let mut report = [0u8; 8];
 
-            // レポートID
-            report[0] = 0x30; // 標準入力レポート
+            // Byte 0-1: Buttons (Little Endian)
+            report[0] = (state.buttons & 0xFF) as u8;
+            report[1] = ((state.buttons >> 8) & 0xFF) as u8;
 
-            // タイマー (簡易実装)
-            report[1] = 0x00;
+            // Byte 2: HAT (Lower 4 bits)
+            // HAT is stored in bits 16-19 of state.buttons in our internal representation for DPad
+            // But here we need to extract it or recalculate it.
+            // Actually, let's look at how dpad_to_bits stores it.
+            // It stores it as 0x00000 to 0x80000.
+            // Let's assume state.buttons bits 16-19 hold the HAT value if we change dpad_to_bits.
+            // For now, let's decode the HAT from the upper bits of state.buttons if we use that storage,
+            // OR better, let's just use a separate field for HAT in ProControllerState if we want to be clean.
+            // However, to minimize changes, let's look at dpad_to_bits below.
+            // It currently returns 0x00000 etc.
+            // Let's change dpad_to_bits to return the 4-bit value and store it in a specific place,
+            // or just extract it here.
+            // Wait, the current implementation of dpad_to_bits returns a bitmask for Pro Controller?
+            // No, Pro Controller HAT is 0-7.
+            // The current dpad_to_bits returns 0x00000, 0x10000... which looks like it's trying to map to specific bits?
+            // Actually, looking at the previous code:
+            // 0x00 => 0x00000 (UP)
+            // ...
+            // _ => 0x80000 (NEUTRAL)
+            // This suggests the HAT value was being stored in the 3rd byte (bits 16-23) of the buttons field?
+            // In the previous send_report:
+            // report[5] = ((state.buttons >> 16) & 0xFF) as u8;
+            // So yes, it was stored in byte 5.
+            // For Pokken, HAT is in Byte 2.
+            // Let's extract it.
+            let hat_value = (state.buttons >> 16) & 0x0F;
+            report[2] = hat_value as u8;
 
-            // バッテリー状態とコネクション情報
-            report[2] = 0x91; // 充電中、フル充電
-
-            // ボタン状態 (3バイト)
-            report[3] = (state.buttons & 0xFF) as u8;
-            report[4] = ((state.buttons >> 8) & 0xFF) as u8;
-            report[5] = ((state.buttons >> 16) & 0xFF) as u8;
-
-            // 左スティック
-            report[6] = state.left_stick_x;
-            report[7] = state.left_stick_y;
-            report[8] = 0x00; // 左スティック上位ビット
-
-            // 右スティック
-            report[9] = state.right_stick_x;
-            report[10] = state.right_stick_y;
-            report[11] = 0x00; // 右スティック上位ビット
-
-            // 振動データ（未実装）
-            report[12] = 0x00;
-
-            // 残りは0で埋める
+            // Byte 3: LX
+            report[3] = state.left_stick_x;
+            // Byte 4: LY
+            report[4] = state.left_stick_y;
+            // Byte 5: RX
+            report[5] = state.right_stick_x;
+            // Byte 6: RY
+            report[6] = state.right_stick_y;
+            // Byte 7: Vendor
+            report[7] = 0x00;
 
             // HIDデバイスに書き込み（エラーハンドリング改善）
             match OpenOptions::new().write(true).open(path) {
                 Ok(mut file) => {
                     match file.write_all(&report) {
                         Ok(_) => {
-                            debug!("Sent HID report");
+                            info!("HID Report: Btn={:04X} HAT={:02X} L=({},{}) R=({},{}) Raw=[{:02X},{:02X},{:02X},{:02X},{:02X},{:02X},{:02X},{:02X}]",
+                                  (report[1] as u16) << 8 | report[0] as u16, report[2],
+                                  report[3], report[4], report[5], report[6],
+                                  report[0], report[1], report[2], report[3], report[4], report[5], report[6], report[7]);
                             Ok(())
                         }
                         Err(e) => {
@@ -144,22 +162,41 @@ impl LinuxHidController {
 
     /// ボタン値を計算
     fn button_to_bits(button: &Button) -> u32 {
-        button.value() as u32
+        // Pokken Controller Mapping based on standard Switch Pro Controller
+        // We need to map our internal Button constants to the Pokken report format
+        // Pokken Report (Little Endian):
+        // Byte 0: Y(1), B(2), A(4), X(8), L(10), R(20), ZL(40), ZR(80)
+        // Byte 1: Minus(1), Plus(2), LStick(4), RStick(8), Home(10), Capture(20)
+        
+        let val = button.value();
+        let mut mapped = 0u32;
+        
+        // Byte 0 mappings
+        if val & Button::Y.value() != 0 { mapped |= 0x0001; }
+        if val & Button::B.value() != 0 { mapped |= 0x0002; }
+        if val & Button::A.value() != 0 { mapped |= 0x0004; }
+        if val & Button::X.value() != 0 { mapped |= 0x0008; }
+        if val & Button::L.value() != 0 { mapped |= 0x0010; }
+        if val & Button::R.value() != 0 { mapped |= 0x0020; }
+        if val & Button::ZL.value() != 0 { mapped |= 0x0040; }
+        if val & Button::ZR.value() != 0 { mapped |= 0x0080; }
+        
+        // Byte 1 mappings (shifted by 8)
+        if val & Button::MINUS.value() != 0 { mapped |= 0x0100; }
+        if val & Button::PLUS.value() != 0 { mapped |= 0x0200; }
+        if val & Button::L_STICK.value() != 0 { mapped |= 0x0400; }
+        if val & Button::R_STICK.value() != 0 { mapped |= 0x0800; }
+        if val & Button::HOME.value() != 0 { mapped |= 0x1000; }
+        if val & Button::CAPTURE.value() != 0 { mapped |= 0x2000; }
+        
+        mapped
     }
 
     /// DPad値を計算
     fn dpad_to_bits(dpad: &DPad) -> u32 {
-        match dpad.value() {
-            0x00 => 0x00000, // UP
-            0x01 => 0x10000, // UP_RIGHT
-            0x02 => 0x20000, // RIGHT
-            0x03 => 0x30000, // DOWN_RIGHT
-            0x04 => 0x40000, // DOWN
-            0x05 => 0x50000, // DOWN_LEFT
-            0x06 => 0x60000, // LEFT
-            0x07 => 0x70000, // UP_LEFT
-            _ => 0x80000,    // NEUTRAL
-        }
+        // Shifted by 16 bits to be stored in the upper part of buttons
+        // This will be extracted as Byte 2 in send_report
+        (dpad.value() as u32) << 16
     }
 }
 
@@ -269,8 +306,11 @@ impl ControllerEmulator for LinuxHidController {
             // 実際にHIDデバイスに書き込めるかテスト（接続状態の確認）
             match OpenOptions::new().write(true).open(path) {
                 Ok(mut file) => {
-                    // 空のレポートを送信してテスト
-                    let test_report = [0u8; 64];
+                    // NEUTRAL状態のレポートを送信してテスト
+                    // Pokken Controller uses 8-byte reports
+                    // [Buttons_L, Buttons_H, HAT, LX, LY, RX, RY, 0x00]
+                    // NEUTRAL: No buttons, HAT=0x08, sticks centered at 0x80
+                    let test_report = [0x00, 0x00, 0x08, 0x80, 0x80, 0x80, 0x80, 0x00];
                     match file.write_all(&test_report) {
                         Ok(_) => {
                             debug!("HID device is writable and connected");
@@ -307,35 +347,90 @@ impl ControllerEmulator for LinuxHidController {
         for action in &command.sequence {
             match &action.action_type {
                 ActionType::PressButton(button) => {
+                    info!("PressButton: {:?}, bits: 0x{:04X}", button, Self::button_to_bits(button));
                     let mut state = self.current_state.lock().unwrap();
+                    // CRITICAL: D-padビットをクリアしてからボタンを押す
+                    // これにより、ボタン押下中にD-pad入力が残らない
+                    state.buttons &= 0xFFF0FFFF; // D-padビット（16-19）をクリア
+                    state.buttons |= (DPad::NEUTRAL.value() as u32) << 16; // NEUTRAL状態を設定
                     state.buttons |= Self::button_to_bits(button);
+                    info!("State buttons after press: 0x{:08X}", state.buttons);
+                    // スティックの値は変更しない（現在の値を維持）
+                    // これにより、意図しないスティック入力を防ぐ
                     drop(state);
-                    self.send_report()?;
-                    thread::sleep(Duration::from_millis(action.duration_ms as u64));
+                    // 押下中は継続的にレポートを送信（8ms間隔 = 125Hz）
+                    let report_interval = 8u64;
+                    let mut elapsed = 0u64;
+                    while elapsed < action.duration_ms as u64 {
+                        self.send_report()?;
+                        thread::sleep(Duration::from_millis(report_interval));
+                        elapsed += report_interval;
+                    }
                 }
                 ActionType::ReleaseButton(button) => {
+                    info!("ReleaseButton: {:?}, bits: 0x{:04X}", button, Self::button_to_bits(button));
                     let mut state = self.current_state.lock().unwrap();
                     state.buttons &= !Self::button_to_bits(button);
+                    // D-padビットもクリアしてNEUTRALに設定
+                    state.buttons &= 0xFFF0FFFF; // D-padビット（16-19）をクリア
+                    state.buttons |= (DPad::NEUTRAL.value() as u32) << 16; // NEUTRAL状態を設定
+                    info!("State buttons after release: 0x{:08X}", state.buttons);
+                    // スティックの値は変更しない（現在の値を維持）
                     drop(state);
-                    self.send_report()?;
-                    thread::sleep(Duration::from_millis(action.duration_ms as u64));
+                    // リリース中も継続的にレポートを送信（8ms間隔 = 125Hz）
+                    let report_interval = 8u64;
+                    let mut elapsed = 0u64;
+                    while elapsed < action.duration_ms as u64 {
+                        self.send_report()?;
+                        thread::sleep(Duration::from_millis(report_interval));
+                        elapsed += report_interval;
+                    }
                 }
                 ActionType::SetDPad(dpad) => {
+                    info!("SetDPad: {:?}, bits: 0x{:08X}", dpad, Self::dpad_to_bits(dpad));
                     let mut state = self.current_state.lock().unwrap();
                     // DPadビットをクリアしてから設定
                     state.buttons &= 0xFFF0FFFF;
                     state.buttons |= Self::dpad_to_bits(dpad);
+                    info!("State buttons after DPad: 0x{:08X}", state.buttons);
+                    // スティックの値は変更しない（現在の値を維持）
+                    // これにより、D-pad使用時にスティックからの意図しない入力を防ぐ
                     drop(state);
-                    self.send_report()?;
-                    thread::sleep(Duration::from_millis(action.duration_ms as u64));
+                    // DPad入力中も継続的にレポートを送信（8ms間隔 = 125Hz）
+                    let report_interval = 8u64;
+                    let mut elapsed = 0u64;
+                    while elapsed < action.duration_ms as u64 {
+                        self.send_report()?;
+                        thread::sleep(Duration::from_millis(report_interval));
+                        elapsed += report_interval;
+                    }
                 }
                 ActionType::MoveLeftStick(position) => {
                     let mut state = self.current_state.lock().unwrap();
                     state.left_stick_x = position.x;
                     state.left_stick_y = position.y;
                     drop(state);
-                    self.send_report()?;
-                    thread::sleep(Duration::from_millis(action.duration_ms as u64));
+                    // 左スティック入力中も継続的にレポートを送信（8ms間隔 = 125Hz）
+                    let report_interval = 8u64;
+                    let mut elapsed = 0u64;
+                    while elapsed < action.duration_ms as u64 {
+                        self.send_report()?;
+                        thread::sleep(Duration::from_millis(report_interval));
+                        elapsed += report_interval;
+                    }
+                    // スティック移動後、自動的に中央に戻す
+                    // CENTER (128, 128) でない場合のみリセット
+                    if position.x != 128 || position.y != 128 {
+                        let mut state = self.current_state.lock().unwrap();
+                        state.left_stick_x = 128;
+                        state.left_stick_y = 128;
+                        drop(state);
+                        // ニュートラル状態を確実に送信
+                        for _ in 0..5 {
+                            self.send_report()?;
+                            thread::sleep(Duration::from_millis(report_interval));
+                        }
+                    }
                 }
                 ActionType::MoveRightStick(position) => {
                     let mut state = self.current_state.lock().unwrap();
