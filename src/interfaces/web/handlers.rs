@@ -1,6 +1,8 @@
+use super::artwork_handlers::ArtworkState;
 use super::log_streamer::stream_logs;
 use super::models::{HardwareDetails, HardwareStatus, SystemInfo};
-use axum::{Json, extract::ws::WebSocketUpgrade, response::Response};
+use axum::{Json, extract::{State, ws::WebSocketUpgrade}, response::Response};
+use std::sync::Arc;
 use std::path::Path;
 
 /// Get system information
@@ -15,8 +17,13 @@ pub async fn get_system_info() -> Json<SystemInfo> {
 }
 
 /// Get hardware status
-pub async fn get_hardware_status() -> Json<HardwareStatus> {
-    let nintendo_switch_connected = check_nintendo_switch_connection().await;
+pub async fn get_hardware_status(
+    State(state): State<Arc<ArtworkState>>,
+) -> Json<HardwareStatus> {
+    // Use the controller abstraction to check connection status
+    // This allows MockController to report "connected" even if physical hardware is missing
+    let nintendo_switch_connected = state.controller.is_connected().unwrap_or(false);
+    
     let usb_otg_available = check_usb_otg_availability();
     let hid_device_available = check_hid_device_availability();
 
@@ -48,6 +55,7 @@ fn get_system_uptime() -> u64 {
     0
 }
 
+#[allow(dead_code)]
 async fn check_nintendo_switch_connection() -> bool {
     use tracing::debug;
 
@@ -58,7 +66,7 @@ async fn check_nintendo_switch_connection() -> bool {
     }
 
     // Check USB Gadget state - UDC should contain the USB controller name when connected
-    let gadget_udc_path = "/sys/kernel/config/usb_gadget/g1/UDC";
+    let gadget_udc_path = "/sys/kernel/config/usb_gadget/nintendo_controller/UDC";
     match std::fs::read_to_string(gadget_udc_path) {
         Ok(udc_content) => {
             let udc_trimmed = udc_content.trim();
@@ -71,7 +79,7 @@ async fn check_nintendo_switch_connection() -> bool {
                     drop(file); // ファイルをすぐに閉じる
 
                     // USB gadgetの状態を確認
-                    let state_path = "/sys/kernel/config/usb_gadget/g1/state";
+                    let state_path = "/sys/kernel/config/usb_gadget/nintendo_controller/state";
                     if let Ok(state) = std::fs::read_to_string(state_path) {
                         debug!("USB gadget state: {}", state.trim());
                     }
@@ -113,7 +121,7 @@ fn get_hardware_details() -> HardwareDetails {
     }
 
     // Check USB gadget configuration
-    details.usb_gadget_configured = Path::new("/sys/kernel/config/usb_gadget/g1").exists();
+    details.usb_gadget_configured = Path::new("/sys/kernel/config/usb_gadget/nintendo_controller").exists();
 
     // Check HID device
     if Path::new("/dev/hidg0").exists() {

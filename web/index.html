@@ -175,15 +175,23 @@
                                 class="max-w-full h-auto rounded-lg shadow-sm mx-auto border border-gray-600"></canvas>
                             <div class="mt-3 text-center space-y-2">
                                 <p class="text-sm text-gray-400" id="convertedImageDetails"></p>
-                                <div class="flex justify-center gap-4">
+                                <div
+                                    class="bg-yellow-900/50 border border-yellow-600 text-yellow-200 px-4 py-3 rounded relative mb-4 text-left text-sm">
+                                    <strong class="font-bold">⚠️ 注意:</strong>
+                                    <ul class="list-disc list-inside mt-1">
+                                        <li>Switch側で<strong>「投稿」画面</strong>を開いてから実行してください。</li>
+                                        <li>ペン先は自動的に最小サイズに設定されます。</li>
+                                    </ul>
+                                </div>
+                                <div class="flex flex-wrap justify-center gap-4">
                                     <button
                                         class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-splatoon-green hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                         id="paintDeviceButton" disabled>
                                         <svg class="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zM7 3V1m0 20v-2m8-10h2m-2 4h2m-2 4h2m-2-8h2" />
+                                                d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
                                         </svg>
-                                        🎮 実機に描画
+                                        実機に描画
                                     </button>
                                     <button
                                         class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-splatoon-blue hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
@@ -192,7 +200,7 @@
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                                 d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                                         </svg>
-                                        💻 シミュレーション
+                                        シミュレーション
                                     </button>
                                     <button
                                         class="inline-flex items-center px-4 py-2 border border-gray-500 text-sm font-medium rounded-md text-gray-300 bg-gray-700 hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-splatoon-blue transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
@@ -366,8 +374,12 @@
                         <label for="previewModeToggle" class="text-sm font-medium text-gray-300">2値化前プレビュー</label>
                         <label for="previewModeToggle" class="relative inline-block cursor-pointer">
                             <input type="checkbox" id="previewModeToggle" class="sr-only peer">
-                            <div class="block bg-gray-600 w-14 h-8 rounded-full transition-colors duration-300 peer-checked:bg-splatoon-blue"></div>
-                            <div class="dot absolute left-1 top-1 bg-white w-6 h-6 rounded-full transition-transform duration-300 peer-checked:translate-x-6 peer-checked:bg-splatoon-yellow"></div>
+                            <div
+                                class="block bg-gray-600 w-14 h-8 rounded-full transition-colors duration-300 peer-checked:bg-splatoon-blue">
+                            </div>
+                            <div
+                                class="dot absolute left-1 top-1 bg-white w-6 h-6 rounded-full transition-transform duration-300 peer-checked:translate-x-6 peer-checked:bg-splatoon-yellow">
+                            </div>
                         </label>
                     </div>
                     <p class="text-xs text-gray-400 mt-2">調整効果を確認するために、2値化前の画像を表示します</p>
@@ -437,22 +449,7 @@
                             </div>
                         </div>
                     </div>
-                    
-                    <!-- キー操作速度調整 -->
-                    <div class="mt-4 pt-4 border-t border-gray-600">
-                        <div class="flex items-center justify-between mb-2">
-                            <label for="operationSpeedSlider" class="text-sm font-medium text-gray-300">キー操作速度（ドット/秒）</label>
-                            <span id="operationSpeedValue" class="text-sm font-semibold text-splatoon-yellow">2.0</span>
-                        </div>
-                        <input type="range" id="operationSpeedSlider" min="0.5" max="5.0" value="2.0" step="0.1"
-                            class="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer slider">
-                        <div class="flex justify-between text-xs text-gray-400 mt-1">
-                            <span>0.5 (遅い)</span>
-                            <span>2.0 (標準)</span>
-                            <span>5.0 (速い)</span>
-                        </div>
-                        <p class="text-xs text-gray-500 mt-2">※ コントローラーの反応に合わせて調整してください</p>
-                    </div>
+
 
                     <!-- 進捗スライダー（シミュレーション時のみ） -->
                     <div class="mt-4 pt-4 border-t border-gray-600 hidden" id="progressSliderControl">
@@ -605,6 +602,281 @@
         </section>
     </main>
 
+    <!-- 速度キャリブレーションモーダル -->
+    <div id="calibrationModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
+        <div class="bg-gray-800 rounded-lg shadow-xl border border-gray-700 p-6 max-w-2xl w-full mx-4">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-xl font-bold font-splatoon-jp heading heading-jp text-splatoon-yellow">速度キャリブレーション
+                </h3>
+                <button id="closeCalibrationButton" class="text-gray-400 hover:text-gray-200 transition-colors">
+                    <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+
+            <!-- 技術仕様情報 -->
+            <div class="bg-gray-700 rounded-lg p-4 mb-6">
+                <h4 class="text-sm font-semibold text-white mb-2">📊 技術仕様</h4>
+                <div class="grid grid-cols-2 gap-2 text-xs text-gray-300">
+                    <div class="flex justify-between">
+                        <span class="text-gray-400">USBポーリング:</span>
+                        <span class="font-mono">5ms (200Hz)</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-400">Switchフレーム:</span>
+                        <span class="font-mono">16.67ms (60fps)</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-400">安全最小値:</span>
+                        <span class="font-mono">40ms/pixel</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-400">安全最大値:</span>
+                        <span class="font-mono">200ms/pixel</span>
+                    </div>
+                    <div class="flex justify-between col-span-2">
+                        <span class="text-gray-400">推奨値:</span>
+                        <span class="font-mono text-splatoon-yellow">100ms/pixel (50+30+20)</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- パラメータ設定 -->
+            <div class="space-y-4 mb-6">
+                <h4 class="text-sm font-semibold text-white">⚙️ パラメータ</h4>
+
+                <!-- Speed Control -->
+                <div class="bg-gray-700 rounded-lg p-4">
+                    <div class="flex items-center justify-between mb-2">
+                        <label for="speedInput" class="text-sm font-medium text-gray-300">描画速度</label>
+                        <span id="speedValue" class="text-sm font-semibold text-splatoon-yellow">1.0x</span>
+                    </div>
+                    <input type="range" id="speedInput" min="50" max="200" value="100" step="10"
+                        class="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer slider">
+                    <div class="flex justify-between text-xs text-gray-400 mt-1">
+                        <span>低速 (0.5x)</span>
+                        <span class="text-center">推奨値: 200ms/px</span>
+                        <span>高速 (2.0x)</span>
+                    </div>
+                </div>
+
+                <!-- 初期化スキップオプション -->
+                <div class="bg-gray-700 rounded-lg p-3">
+                    <label class="flex items-center cursor-pointer">
+                        <input type="checkbox" id="skipInitializationCheckbox" checked
+                            class="w-4 h-4 text-splatoon-orange bg-gray-600 border-gray-500 rounded focus:ring-splatoon-orange focus:ring-2">
+                        <div class="ml-3">
+                            <span class="text-sm font-medium text-gray-200">初期化処理をスキップ</span>
+                            <p class="text-xs text-gray-400 mt-1">ペン切り替え・左上移動・中央移動をスキップします</p>
+                        </div>
+                    </label>
+                </div>
+            </div>
+
+            <!-- 期待値表示 -->
+            <div class="bg-gray-700 rounded-lg p-4 mb-6">
+                <h4 class="text-sm font-semibold text-white mb-3">📋 期待される結果</h4>
+                <p class="text-xs text-gray-400 mb-3">各行でドットと空白のパターンが正しく描画されていれば成功です。</p>
+
+                <!-- SVG期待値 -->
+                <div class="bg-black rounded-lg p-4">
+                    <svg viewBox="0 0 220 60" class="w-full" style="max-width: 440px;">
+                        <!-- 1ピクセルパターン（行1） -->
+                        <g>
+                            <text x="0" y="6" fill="#9CA3AF" font-size="4" font-family="monospace">1px:</text>
+                            <circle cx="20" cy="4" r="1.5" fill="#F5D800" />
+                            <circle cx="26" cy="4" r="1.5" fill="#F5D800" />
+                            <circle cx="32" cy="4" r="1.5" fill="#F5D800" />
+                            <circle cx="38" cy="4" r="1.5" fill="#F5D800" />
+                            <circle cx="44" cy="4" r="1.5" fill="#F5D800" />
+                            <text x="50" y="6" fill="#6B7280" font-size="3" font-family="monospace">●_●_●_●_●_...</text>
+                        </g>
+
+                        <!-- 2ピクセルパターン（行2） -->
+                        <g>
+                            <text x="0" y="18" fill="#9CA3AF" font-size="4" font-family="monospace">2px:</text>
+                            <circle cx="20" cy="16" r="1.5" fill="#F5D800" />
+                            <circle cx="23" cy="16" r="1.5" fill="#F5D800" />
+                            <circle cx="29" cy="16" r="1.5" fill="#F5D800" />
+                            <circle cx="32" cy="16" r="1.5" fill="#F5D800" />
+                            <circle cx="38" cy="16" r="1.5" fill="#F5D800" />
+                            <circle cx="41" cy="16" r="1.5" fill="#F5D800" />
+                            <text x="50" y="18" fill="#6B7280" font-size="3"
+                                font-family="monospace">●●__●●__●●__...</text>
+                        </g>
+
+                        <!-- 3ピクセルパターン（行3） -->
+                        <g>
+                            <text x="0" y="30" fill="#9CA3AF" font-size="4" font-family="monospace">3px:</text>
+                            <circle cx="20" cy="28" r="1.5" fill="#F5D800" />
+                            <circle cx="23" cy="28" r="1.5" fill="#F5D800" />
+                            <circle cx="26" cy="28" r="1.5" fill="#F5D800" />
+                            <circle cx="32" cy="28" r="1.5" fill="#F5D800" />
+                            <circle cx="35" cy="28" r="1.5" fill="#F5D800" />
+                            <circle cx="38" cy="28" r="1.5" fill="#F5D800" />
+                            <text x="50" y="30" fill="#6B7280" font-size="3"
+                                font-family="monospace">●●●___●●●___...</text>
+                        </g>
+
+                        <!-- 4ピクセルパターン（行4） -->
+                        <g>
+                            <text x="0" y="42" fill="#9CA3AF" font-size="4" font-family="monospace">4px:</text>
+                            <circle cx="20" cy="40" r="1.5" fill="#F5D800" />
+                            <circle cx="23" cy="40" r="1.5" fill="#F5D800" />
+                            <circle cx="26" cy="40" r="1.5" fill="#F5D800" />
+                            <circle cx="29" cy="40" r="1.5" fill="#F5D800" />
+                            <circle cx="37" cy="40" r="1.5" fill="#F5D800" />
+                            <circle cx="40" cy="40" r="1.5" fill="#F5D800" />
+                            <circle cx="43" cy="40" r="1.5" fill="#F5D800" />
+                            <circle cx="46" cy="40" r="1.5" fill="#F5D800" />
+                            <text x="54" y="42" fill="#6B7280" font-size="3" font-family="monospace">●●●●____...</text>
+                        </g>
+
+                        <!-- 5ピクセルパターン（行5） -->
+                        <g>
+                            <text x="0" y="54" fill="#9CA3AF" font-size="4" font-family="monospace">5px:</text>
+                            <circle cx="20" cy="52" r="1.5" fill="#F5D800" />
+                            <circle cx="23" cy="52" r="1.5" fill="#F5D800" />
+                            <circle cx="26" cy="52" r="1.5" fill="#F5D800" />
+                            <circle cx="29" cy="52" r="1.5" fill="#F5D800" />
+                            <circle cx="32" cy="52" r="1.5" fill="#F5D800" />
+                            <circle cx="42" cy="52" r="1.5" fill="#F5D800" />
+                            <circle cx="45" cy="52" r="1.5" fill="#F5D800" />
+                            <circle cx="48" cy="52" r="1.5" fill="#F5D800" />
+                            <circle cx="51" cy="52" r="1.5" fill="#F5D800" />
+                            <circle cx="54" cy="52" r="1.5" fill="#F5D800" />
+                            <text x="62" y="54" fill="#6B7280" font-size="3"
+                                font-family="monospace">●●●●●_____...</text>
+                        </g>
+                    </svg>
+                </div>
+
+                <p class="text-xs text-gray-400 mt-3">
+                    <strong>判定基準:</strong> ドットと空白のパターンが均等に並んでいれば、設定速度は安全です。
+                    ドットが乱れていたり、空白が詰まっている場合は、速度が限界を超えています。
+                </p>
+            </div>
+
+            <!-- アクションボタン -->
+            <div class="flex justify-end space-x-3">
+                <button id="cancelCalibrationButton"
+                    class="px-4 py-2 border border-gray-500 text-sm font-medium rounded-md text-gray-300 bg-gray-700 hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-colors">
+                    キャンセル
+                </button>
+                <button id="stopCalibrationButton"
+                    class="hidden px-4 py-2 border border-red-500 text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors">
+                    <svg class="inline-block mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />
+                    </svg>
+                    停止
+                </button>
+                <button id="runCalibrationButton"
+                    class="px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-splatoon-orange hover:bg-orange-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 transition-colors">
+                    <svg class="inline-block mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    実行
+                </button>
+                <button id="applyAndStartPaintingButton"
+                    class="px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors">
+                    <svg class="inline-block mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    設定して描画開始
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 描画準備モーダル -->
+    <div id="paintPrepareModal"
+        class="hidden fixed inset-0 bg-gray-900 bg-opacity-75 z-50 items-center justify-center p-4">
+        <div class="bg-gray-800 rounded-lg max-w-md w-full shadow-2xl border-2 border-splatoon-blue">
+            <!-- モーダルヘッダー -->
+            <div class="flex items-center justify-between p-6 border-b border-gray-700">
+                <div class="flex items-center">
+                    <svg class="h-6 w-6 text-splatoon-yellow mr-2" fill="none" stroke="currentColor"
+                        viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                    </svg>
+                    <h3 class="text-xl font-bold font-splatoon text-splatoon-yellow">描画準備</h3>
+                </div>
+                <button id="closePaintPrepareButton" class="text-gray-400 hover:text-gray-200 transition-colors">
+                    <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+
+            <!-- モーダルボディ -->
+            <div class="p-6 space-y-4">
+                <p class="text-gray-300 text-sm">
+                    描画を開始する前に、速度キャリブレーションを実行して最適な設定を確認することを推奨します。
+                </p>
+
+                <!-- 現在のキャリブレーション設定 -->
+                <div class="bg-gray-700 rounded-lg p-4">
+                    <h4 class="text-sm font-semibold text-gray-300 mb-2">現在のキャリブレーション設定</h4>
+                    <div class="space-y-1 text-sm">
+                        <div class="flex justify-between">
+                            <span class="text-gray-400">描画速度:</span>
+                            <span id="currentCalibrationSpeed" class="text-splatoon-yellow font-mono">1.0x</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-400">押下時間:</span>
+                            <span id="currentCalibrationPress" class="text-gray-300 font-mono">100ms</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-400">リリース時間:</span>
+                            <span id="currentCalibrationRelease" class="text-gray-300 font-mono">60ms</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-400">待機時間:</span>
+                            <span id="currentCalibrationWait" class="text-gray-300 font-mono">40ms</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- アクションボタン -->
+            <div class="flex justify-end space-x-3 p-6 border-t border-gray-700">
+                <button id="cancelPaintPrepareButton"
+                    class="px-4 py-2 border border-gray-500 text-sm font-medium rounded-md text-gray-300 bg-gray-700 hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-colors">
+                    キャンセル
+                </button>
+                <button id="openCalibrationFromPaintButton"
+                    class="px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-purple-600 hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 transition-colors">
+                    <svg class="inline-block mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+                    </svg>
+                    速度キャリブレーション
+                </button>
+                <button id="startPaintingButton"
+                    class="px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-splatoon-orange hover:bg-orange-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 transition-colors">
+                    <svg class="inline-block mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    開始
+                </button>
+            </div>
+        </div>
+    </div>
+
     <footer class="bg-gray-800 text-gray-300 mt-16 border-t border-gray-700">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
             <div class="text-center">
@@ -613,9 +885,9 @@
         </div>
     </footer>
 
-    <script src="js/image-processor.js"></script>
-    <script src="js/app.js"></script>
-    <script src="js/debug.js"></script>
+    <script src="js/image-processor.js?v=2"></script>
+    <script src="js/app.js?v=2"></script>
+    <script src="js/debug.js?v=2"></script>
 </body>
 
 </html>
