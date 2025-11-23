@@ -5,33 +5,56 @@ on:
     tags:
       - 'v*'
 
+# デフォルトの権限を読み取り専用に制限
+permissions:
+  contents: read
+
+# リリースごとに並行実行を制御（キャンセルなし）
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 env:
   CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-D warnings"
 
 jobs:
   build-release:
-    name: Build Release - ${{ matrix.target }}
+    name: Release Build - ${{ matrix.os-name }} (${{ matrix.target }})
     runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
     strategy:
+      fail-fast: false
       matrix:
         include:
           - target: x86_64-unknown-linux-gnu
             os-name: Linux-x86_64
           - target: aarch64-unknown-linux-gnu
             os-name: Linux-aarch64
-    
+
     steps:
-      - uses: actions/checkout@v4
-      
+      - uses: actions/checkout@v6
+
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
-        
-      - name: Build with Cross
-        uses: houseabsolute/actions-rust-cross@v0
+        uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
+          toolchain: stable
+
+      - name: Cache dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "rust-release-${{ matrix.target }}"
+          cache-on-failure: false
+
+      - name: Build with Cross
+        uses: houseabsolute/actions-rust-cross@v1
+        with:
+          command: build
           target: ${{ matrix.target }}
           args: --release --verbose
-          
+
       - name: Prepare release binary
         run: |
           mkdir -p release
@@ -40,7 +63,7 @@ jobs:
           cd release
           tar czf splatoon3-ghost-drawer-${{ matrix.os-name }}.tar.gz splatoon3-ghost-drawer-${{ matrix.os-name }}
           sha256sum *.tar.gz > splatoon3-ghost-drawer-${{ matrix.os-name }}.tar.gz.sha256
-          
+
       - name: Upload release artifact
         uses: actions/upload-artifact@v4
         with:
@@ -54,36 +77,37 @@ jobs:
     name: Create Release
     runs-on: ubuntu-latest
     needs: build-release
+    timeout-minutes: 30
     permissions:
       contents: write
-    
+
     steps:
-      - uses: actions/checkout@v4
-      
+      - uses: actions/checkout@v6
+
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
           path: artifacts/
-          
+
       - name: Prepare release files
         run: |
           mkdir -p release-files
           find artifacts -name "*.tar.gz" -o -name "*.sha256" | xargs -I {} cp {} release-files/
           ls -la release-files/
-          
+
       - name: Generate release notes
         id: release_notes
         run: |
           VERSION=${GITHUB_REF#refs/tags/}
           echo "VERSION=$VERSION" >> $GITHUB_ENV
-          
+
           # Check if this is a pre-release
           if [[ "$VERSION" =~ -(rc|beta|alpha) ]]; then
             echo "IS_PRERELEASE=true" >> $GITHUB_ENV
           else
             echo "IS_PRERELEASE=false" >> $GITHUB_ENV
           fi
-          
+
           # Generate release notes
           cat > release_notes.md << EOF
           ## Splatoon3 Ghost Drawer $VERSION
@@ -116,9 +140,9 @@ jobs:
           sha256sum -c splatoon3-ghost-drawer-*.tar.gz.sha256
           \`\`\`
           EOF
-          
+
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v2.4.2
         with:
           tag_name: ${{ github.ref }}
           name: ${{ env.VERSION }}
@@ -126,3 +150,4 @@ jobs:
           prerelease: ${{ env.IS_PRERELEASE }}
           files: release-files/*
           generate_release_notes: true
+          fail_on_unmatched_files: true
