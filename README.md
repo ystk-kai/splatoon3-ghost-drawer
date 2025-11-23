@@ -1,32 +1,33 @@
 # Splatoon3 Ghost Drawer
 
-Nintendo Switch Pro Controllerをエミュレートして、Splatoon3の広場で画像を自動描画するシステムです。  
-USB OTG機能を使用してSwitchに接続し、画像データを忠実に再現します。
+Splatoon3の広場で画像を自動描画するシステムです。
+Raspberry Pi Zero 2WをUSB経由でNintendo Switchに接続し、Web UIから画像をアップロードするだけで自動的に描画を実行します。
 
 ## 主な機能
 
 - 🎨 画像ファイルからSplatoon3用ドットデータへの自動変換
-- 🎮 Nintendo Switch Pro Controllerの完全エミュレーション
-- 🔌 USB OTG経由でのSwitch直接接続
+- 🔌 USB経由でのNintendo Switch直接接続
 - 🌐 Web UIによる直感的な操作とリアルタイム制御
 - 📊 描画進捗のリアルタイム監視とログストリーミング
-- 🚀 高速な画像処理と最適化されたドット配置
+- 🎯 複数の描画戦略から選択可能（最適化アルゴリズムによる高速描画）
+- 📈 描画統計情報の表示
 
-## 技術スタック
+### 描画戦略
 
-- **言語**: Rust 2024 Edition
-- **アーキテクチャ**: Domain-Driven Design (DDD)
-- **Webフレームワーク**: Axum
-- **非同期ランタイム**: Tokio
-- **対応プラットフォーム**: Linux (USB Gadget API対応)
+| 戦略 | 説明 | パフォーマンス予想 |
+|:---|:---|:---|
+| **Greedy + 2-opt** | Greedy法と2-opt最適化の組み合わせ | 最も高速 |
+| **最近傍法** | 最近傍探索で次の描画点を選択 | 移動距離削減により高速化 |
+| **牛耕式 (ジグザグ)** | ジグザグパターンで描画（行ごとに方向反転） | 標準的な速度 |
+| **ラスタースキャン** | 左から右、上から下へ順次描画 | 標準的な速度 |
 
 ## 対応ハードウェア
 
 USB OTG (On-The-Go) 機能をサポートするLinuxボードが必要です：
 
-- **Raspberry Pi Zero / Zero W / Zero 2W**
-- **Orange Pi Zero 2W**
-- その他のUSB Gadget API対応Linuxデバイス
+- **Raspberry Pi Zero 2W**（動作確認済み）
+
+> **注意**: USB OTG対応の他のLinuxデバイスでも動作する可能性がありますが、動作確認は行っていません。
 
 ## クイックスタート
 
@@ -39,7 +40,7 @@ USB OTG (On-The-Go) 機能をサポートするLinuxボードが必要です：
 ```bash
 # お使いのアーキテクチャに合わせてダウンロード
 
-# Raspberry Pi Zero 2W / Orange Pi Zero 2W の場合（ARM64）
+# Raspberry Pi Zero 2W の場合（ARM64）
 wget https://github.com/ystk-kai/splatoon3-ghost-drawer/releases/latest/download/splatoon3-ghost-drawer-Linux-aarch64.tar.gz
 tar -xzf splatoon3-ghost-drawer-Linux-aarch64.tar.gz
 
@@ -133,7 +134,7 @@ splatoon3-ghost-drawer run --host 127.0.0.1
 ### トラブルシューティング
 
 - **描画が始まらない場合**
-  - Orange PiとSwitchの接続を確認してください
+  - Raspberry Pi Zero 2WとSwitchの接続を確認してください
   - Web UIをリロードして再度試してください
   
 - **途中で描画が止まった場合**
@@ -148,13 +149,11 @@ splatoon3-ghost-drawer run --host 127.0.0.1
   ```
   USB Gadget、HIDデバイス、カーネルモジュールの状態を詳しく確認できます。
 
-- **接続の修正（Orange Pi Zero 2W向け）**
+- **接続の修正**
   ```bash
   sudo splatoon3-ghost-drawer fix-connection
   ```
   カーネルモジュールのロード、USB OTGモードの設定、USB Gadgetのリセット、サービスの再起動を自動的に行います。
-  
-  ※ Orange Pi Zero 2Wの詳細な設定については[ORANGE_PI_ZERO_2W_SETUP.md](docs/ORANGE_PI_ZERO_2W_SETUP.md)を参照してください。
 
 - **コントローラーテスト**
   ```bash
@@ -166,8 +165,7 @@ splatoon3-ghost-drawer run --host 127.0.0.1
 
 ### 前提条件
 
-- Rust 2024 Edition
-- USB OTG対応シングルボードコンピューター
+- USB OTG対応シングルボードコンピューター（Raspberry Pi Zero 2W推奨）
 - 十分な電源供給（5V/2A以上推奨）
 
 ### セットアップ
@@ -180,10 +178,6 @@ cd splatoon3-ghost-drawer
 
 2. **依存関係のインストール**
 ```bash
-# Orange Pi Zero 2W (Armbian)
-sudo apt update
-sudo apt install -y build-essential pkg-config libssl-dev
-
 # Raspberry Pi Zero 2W (Raspberry Pi OS)
 sudo apt update
 sudo apt install -y build-essential pkg-config libssl-dev
@@ -316,9 +310,7 @@ splatoon3-ghost-drawer --version
 ## 制限事項
 
 1. **ハードウェア制約**: USB OTG対応ボードが必要
-2. **性能制約**: 
-   - Raspberry Pi Zero 2W: メモリ制限により大きな画像処理に時間がかかる
-   - Orange Pi Zero 2W: ほとんどの用途で問題なし
+2. **性能制約**: Raspberry Pi Zero 2Wはメモリ制限により大きな画像処理に時間がかかる場合があります
 3. **互換性**: Nintendo Switch本体のファームウェアバージョンによる制約
 4. **法的制約**: 自動化ツールの使用は利用規約を確認してください
 
