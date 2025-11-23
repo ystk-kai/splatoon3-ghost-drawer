@@ -135,6 +135,7 @@ pub mod interfaces {
         pub mod log_streamer;
         mod models;
         pub mod server;
+        pub mod dto;
 
         // Internal re-exports
         pub(crate) use artwork_handlers::*;
