@@ -399,8 +399,47 @@ class GhostDrawerApp {
         // 描画戦略の変更監視
         const strategySelect = document.getElementById('paint-strategy');
         if (strategySelect) {
-            strategySelect.addEventListener('change', () => {
+            strategySelect.addEventListener('change', (e) => {
+                this.selectedStrategy = e.target.value;
                 this.renderStrategyStats();
+            });
+        }
+
+        // 描画回数の変更監視
+        const repeatsInput = document.getElementById('paint-repeats');
+        if (repeatsInput) {
+            repeatsInput.addEventListener('input', () => {
+                this.renderStrategyStats();
+            });
+        }
+
+        // リアルタイム描画回数の変更監視
+        const liveRepeatsInput = document.getElementById('liveRepeatsInput');
+        if (liveRepeatsInput) {
+            liveRepeatsInput.addEventListener('change', async (e) => {
+                const repeats = parseInt(e.target.value, 10) || 1;
+                this.currentRepeats = repeats;
+                if (this.isPainting) {
+                    try {
+                        const response = await fetch('/api/painting/repeats', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({ repeats: repeats })
+                        });
+                        
+                        if (response.ok) {
+                            this.addLog(`描画回数を ${repeats}回 に変更しました`, 'info');
+                            this.updateEstimatedTime();
+                        } else {
+                            throw new Error('Failed to update repeats');
+                        }
+                    } catch (error) {
+                        console.error('Error updating repeats:', error);
+                        this.addLog('描画回数の更新に失敗しました', 'error');
+                    }
+                }
             });
         }
     }
@@ -948,40 +987,53 @@ class GhostDrawerApp {
 
             // Calculate dpad and A button counts based on new operations
             this.dpadCount = 0;
-            this.aButtonCount = 0;
+            this.baseAButtonCount = 0; // Store base count for 1 repeat
             for (const op of this.paintingOperations) {
                 if (op.type === 'move') {
-                if (op.isDpadMove) {
-                    const distance = Math.abs(op.to.x - op.from.x) + Math.abs(op.to.y - op.from.y);
-                    this.dpadCount += distance;
+                    if (op.isDpadMove) {
+                        const distance = Math.abs(op.to.x - op.from.x) + Math.abs(op.to.y - op.from.y);
+                        this.dpadCount += distance;
+                    }
+                } else if (op.type === 'draw') {
+                    this.baseAButtonCount++;
+                } else if (op.type === 'pen_up' || op.type === 'pen_down') {
+                    this.dpadCount++;
                 }
-            } else if (op.type === 'draw') {
-                this.aButtonCount++;
-            } else if (op.type === 'pen_up' || op.type === 'pen_down') {
-                this.dpadCount++;
             }
-        }
-        document.getElementById('dpadOperations').textContent = `0/${this.dpadCount.toLocaleString()}回`;
-        document.getElementById('aButtonPresses').textContent = `0/${this.aButtonCount.toLocaleString()}回`;
+            
+            // Initial A button count calculation
+            const repeatsInput = document.getElementById('paint-repeats');
+            const initialRepeats = repeatsInput ? parseInt(repeatsInput.value, 10) || 1 : 1;
+            this.aButtonCount = this.baseAButtonCount * initialRepeats;
 
-        // 実機想定時間（APIから取得）
-        if (data.estimated_time_sec) {
-            this.totalEstimatedTime = data.estimated_time_sec;
-        } else {
-            // フォールバック: (Aボタン数 * 200ms + 十字キー数 * 150ms) / 1000
-            this.totalEstimatedTime = (this.aButtonCount * 0.2) + (this.dpadCount * 0.15);
-        }
+            // Calculate base movement time for dynamic estimation
+            // API returns estimated time for repeats=1
+            const timing = window.calibrationManager ? window.calibrationManager.getTimingValues() : { pressMs: 100, releaseMs: 60, waitMs: 40 };
+            const dotCycleSec = (timing.pressMs + timing.releaseMs + timing.waitMs) / 1000;
+            const basePaintTime = path.length * dotCycleSec;
+            this.totalMovementTime = Math.max(0, estimatedTime - basePaintTime);
+            this.totalDotsCount = path.length;
+            document.getElementById('dpadOperations').textContent = `0/${this.dpadCount.toLocaleString()}回`;
+            document.getElementById('aButtonPresses').textContent = `0/${this.aButtonCount.toLocaleString()}回`;
 
-        // クライアント側で再計算して最新のキャリブレーション値を反映
-        this.updateEstimatedTime();
+            // 実機想定時間（APIから取得）
+            if (data.estimated_time_sec) {
+                this.totalEstimatedTime = data.estimated_time_sec;
+            } else {
+                // フォールバック: (Aボタン数 * 200ms + 十字キー数 * 150ms) / 1000
+                this.totalEstimatedTime = (this.aButtonCount * 0.2) + (this.dpadCount * 0.15);
+            }
 
-        this.addLog(`描画ドット数: ${path.length}個`, 'info');
-        this.addLog(`推定描画時間: ${this.formatTime(this.totalEstimatedTime)}`, 'info');
-        this.addLog(`操作回数 - 十字キー: ${this.dpadCount}回、Aボタン: ${this.aButtonCount}回`, 'info');
+            // クライアント側で再計算して最新のキャリブレーション値を反映
+            this.updateEstimatedTime();
+
+            this.addLog(`描画ドット数: ${path.length}個`, 'info');
+            this.addLog(`推定描画時間: ${this.formatTime(this.totalEstimatedTime)}`, 'info');
+            this.addLog(`操作回数 - 十字キー: ${this.dpadCount}回、Aボタン: ${this.aButtonCount}回`, 'info');
             
         } catch (error) {
             console.error('Error preparing painting data:', error);
-            alert('描画データの準備に失敗しました');
+            alert(`描画データの準備に失敗しました: ${error.message}`);
         }
     }
     
@@ -1018,6 +1070,18 @@ class GhostDrawerApp {
         const releaseSec = timing.releaseMs / 1000;
         const waitSec = timing.waitMs / 1000;
 
+        // 描画回数を取得 (リアルタイム設定があればそちらを優先)
+        let repeats = this.currentRepeats || 1;
+        
+        // まだcurrentRepeatsが設定されていない場合（準備画面など）
+        if (!this.isPainting) {
+            const prepareRepeatsInput = document.getElementById('paint-repeats');
+            if (prepareRepeatsInput) {
+                repeats = parseInt(prepareRepeatsInput.value, 10) || 1;
+            }
+        }
+        console.log(`Calculating time with repeats: ${repeats}`);
+
         for (const op of this.paintingOperations) {
             switch (op.type) {
                 case 'pen_up':
@@ -1027,7 +1091,8 @@ class GhostDrawerApp {
                     total += pressSec;
                     break;
                 case 'draw':
-                    total += (pressSec + releaseSec + waitSec);
+                    // 描画はキャリブレーション値（押下+解放+待機）× 回数
+                    total += (pressSec + releaseSec + waitSec) * repeats;
                     break;
                 case 'move':
                     // 移動もキャリブレーション値（押下+解放+待機）を使用
@@ -1081,6 +1146,18 @@ class GhostDrawerApp {
     }
 
     updatePaintingProgress(data) {
+        // ステータスメッセージの処理
+        if (data.status_message) {
+            const progressText = document.getElementById('progressText');
+            if (progressText) {
+                progressText.textContent = `準備中... (${data.status_message})`;
+                // Ensure progress container is visible
+                const progressContainer = document.getElementById('progressContainer');
+                if (progressContainer) progressContainer.classList.remove('hidden');
+            }
+            return;
+        }
+
         if (!this.isPainting) return;
 
         const { current, total, x, y, dpad_operations, a_button_presses, is_paint } = data;
@@ -1138,13 +1215,33 @@ class GhostDrawerApp {
             const remainingDots = total - current;
             let estimatedRemaining;
 
-            // リアルタイム平均計算は変動が大きいため廃止し、
-            // バックエンドで計算された総推定時間から経過時間を引く方式に変更
-            // これにより、残り時間は常に安定して減少する
-            if (this.totalEstimatedTime) {
+            // リアルタイム設定を取得
+            const liveInput = document.getElementById('liveRepeatsInput');
+            const currentRepeats = liveInput ? parseInt(liveInput.value, 10) || 1 : this.currentRepeats;
+
+            // Aボタン回数を動的に更新 (現在の実績 + 残りドット * 現在のリピート数)
+            if (a_button_presses !== undefined) {
+                this.aButtonCount = a_button_presses + (remainingDots * currentRepeats);
+                document.getElementById('aButtonPresses').textContent = `${a_button_presses.toLocaleString()}/${this.aButtonCount.toLocaleString()}回`;
+            }
+
+            // 残り時間を動的に計算
+            if (this.totalMovementTime !== undefined && this.totalDotsCount > 0) {
+                // 残りの移動時間（移動時間はリピート回数に依存しないと仮定）
+                // 進捗率に基づいて残りの移動時間を按分
+                const remainingMovementTime = (this.totalMovementTime / this.totalDotsCount) * remainingDots;
+                
+                // 残りの描画時間（リピート回数を考慮）
+                const timing = window.calibrationManager ? window.calibrationManager.getTimingValues() : { pressMs: 100, releaseMs: 60, waitMs: 40 };
+                const dotCycleSec = (timing.pressMs + timing.releaseMs + timing.waitMs) / 1000;
+                const remainingPaintTime = remainingDots * currentRepeats * dotCycleSec;
+
+                estimatedRemaining = remainingMovementTime + remainingPaintTime;
+            } else if (this.totalEstimatedTime) {
+                // フォールバック: 単純な減算 (リピート変更を考慮できないため精度は低い)
                 estimatedRemaining = Math.max(0, this.totalEstimatedTime - elapsed);
             } else {
-                // フォールバック（通常はここには来ないはず）
+                // フォールバック
                 const averageTimePerDot = elapsed / current;
                 estimatedRemaining = remainingDots * averageTimePerDot;
             }
@@ -1235,6 +1332,38 @@ class GhostDrawerApp {
         const tbody = document.getElementById('strategyComparisonBody');
         if (!tbody) return;
         
+        // 描画回数を取得
+        const repeatsInput = document.getElementById('paint-repeats');
+        const repeats = repeatsInput ? parseInt(repeatsInput.value, 10) || 1 : 1;
+
+        // キャリブレーション値を取得
+        const timing = window.calibrationManager ? window.calibrationManager.getTimingValues() : { pressMs: 100, releaseMs: 60, waitMs: 40 };
+        const cycleSec = (timing.pressMs + timing.releaseMs + timing.waitMs) / 1000;
+
+        // 最も推定時間が短い戦略を見つける
+        let minTime = Infinity;
+        let bestStrategy = null;
+
+        this.strategyData.strategies.forEach(stat => {
+            // 時間を計算 (キャリブレーション値に基づく)
+            // Aボタン回数 * サイクル時間 * リピート回数 + 十字キー回数 * サイクル時間
+            const estimatedTime = (stat.a_button_presses * cycleSec * repeats) + (stat.dpad_operations * cycleSec);
+            
+            if (estimatedTime < minTime) {
+                minTime = estimatedTime;
+                bestStrategy = stat.strategy;
+            }
+        });
+
+        // 初回表示時（または戦略が未選択時）に最適な戦略を自動選択
+        if (bestStrategy && (!this.selectedStrategy || !this.strategyData.strategies.find(s => s.strategy === this.selectedStrategy))) {
+            this.selectedStrategy = bestStrategy;
+            const select = document.getElementById('paint-strategy');
+            if (select) select.value = bestStrategy;
+        }
+
+        const currentStrategy = this.selectedStrategy || (this.strategyData.strategies[0] ? this.strategyData.strategies[0].strategy : 'GreedyTwoOpt');
+        
         tbody.innerHTML = '';
 
         // 戦略名の日本語マッピング
@@ -1245,13 +1374,6 @@ class GhostDrawerApp {
             'RasterScan': 'ラスタースキャン'
         };
 
-        // 現在選択されている戦略
-        const currentStrategy = document.getElementById('paint-strategy').value;
-
-        // キャリブレーション値を取得
-        const timing = window.calibrationManager ? window.calibrationManager.getTimingValues() : { pressMs: 100, releaseMs: 60, waitMs: 40 };
-        const cycleSec = (timing.pressMs + timing.releaseMs + timing.waitMs) / 1000;
-
         this.strategyData.strategies.forEach(stat => {
             const tr = document.createElement('tr');
             tr.className = 'bg-gray-800 border-b border-gray-700 hover:bg-gray-700 transition-colors';
@@ -1260,7 +1382,8 @@ class GhostDrawerApp {
             }
 
             // 時間を計算 (キャリブレーション値に基づく)
-            const estimatedTime = (stat.dpad_operations + stat.a_button_presses) * cycleSec;
+            // Aボタン回数 * サイクル時間 * リピート回数 + 十字キー回数 * サイクル時間
+            const estimatedTime = (stat.a_button_presses * cycleSec * repeats) + (stat.dpad_operations * cycleSec);
             
             // 時間をフォーマット (分:秒)
             const minutes = Math.floor(estimatedTime / 60);
@@ -1276,8 +1399,9 @@ class GhostDrawerApp {
             
             // 行クリックで戦略を選択
             tr.addEventListener('click', () => {
+                this.selectedStrategy = stat.strategy;
                 const select = document.getElementById('paint-strategy');
-                select.value = stat.strategy;
+                if (select) select.value = stat.strategy;
                 // ハイライト更新
                 this.renderStrategyStats();
             });
@@ -1285,9 +1409,7 @@ class GhostDrawerApp {
             tbody.appendChild(tr);
         });
         
-        // セレクトボックス変更時にもハイライト更新（イベントリスナーの重複登録を防ぐため、ここでは登録しない）
-        // 代わりにinitEventListenersなどで登録するか、ここで一度だけ登録する仕組みが必要だが、
-        // 簡易的に毎回レンダリングすることで対応
+
     }
 
     closePaintPrepareModal() {
@@ -1323,8 +1445,22 @@ class GhostDrawerApp {
             return;
         }
 
+        if (!isDevicePainting && useDevice === null && !confirm('実機が接続されていません。シミュレーションモードで開始しますか？')) {
+            return;
+        }
+
         this.isPainting = true;
         this.updateButtonStates();
+
+        // リアルタイム設定の初期値を設定
+        const liveRepeatsInput = document.getElementById('liveRepeatsInput');
+        const prepareRepeatsInput = document.getElementById('paint-repeats');
+        if (liveRepeatsInput && prepareRepeatsInput) {
+            liveRepeatsInput.value = prepareRepeatsInput.value;
+            this.currentRepeats = parseInt(prepareRepeatsInput.value, 10) || 1;
+        } else {
+            this.currentRepeats = 1;
+        }
 
         // 描画データを準備
         await this.preparePaintingData(); // Await the async call
@@ -1366,20 +1502,23 @@ class GhostDrawerApp {
                 this.initializePaintingUI();
 
                 const strategy = document.getElementById('paint-strategy').value;
-            
-                const response = await fetch(`/api/artworks/${this.currentArtworkId}/paint`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        press_ms: parseInt(timing.pressMs),
-                        release_ms: parseInt(timing.releaseMs),
-                        wait_ms: parseInt(timing.waitMs),
-                        preview: false,
-                        strategy: strategy
-                    }),
-                });
+            const repeatsInput = document.getElementById('paint-repeats');
+            const repeats = repeatsInput ? parseInt(repeatsInput.value, 10) || 1 : 1;
+
+            const response = await fetch(`/api/artworks/${this.currentArtworkId}/paint`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    press_ms: timing.pressMs,
+                    release_ms: timing.releaseMs,
+                    wait_ms: timing.waitMs,
+                    preview: false,
+                    strategy: strategy,
+                    repeats: repeats
+                })
+            });
 
                 if (!response.ok) {
                     throw new Error(`描画エラー: ${response.status}`);
@@ -1681,7 +1820,10 @@ class GhostDrawerApp {
         const totalTime = (Date.now() - this.paintingStartTime) / 1000;
         this.addLog(`描画が完了しました（実行時間: ${this.formatTime(totalTime)}）`, 'success');
 
+
         // 描画進捗エリアと進捗バーを少し表示してから隠す（実機描画時のみ）
+
+
         // シミュレーション時は確認のために残す
         if (this.isDevicePainting) {
             setTimeout(() => {
@@ -1896,11 +2038,44 @@ class GhostDrawerApp {
     }
 
     downloadResult() {
-        if (!this.currentFile) return;
+        if (!this.currentBinaryData) return;
 
-        this.addLog('結果をダウンロード中...', 'info');
-        // ダウンロード機能の実装
-        // 実際の実装では、変換結果をダウンロード
+        this.addLog('画像をダウンロード中...', 'info');
+        
+        // 320x120のキャンバスを作成
+        const canvas = document.createElement('canvas');
+        canvas.width = 320;
+        canvas.height = 120;
+        const ctx = canvas.getContext('2d');
+        
+        // 背景を白で塗りつぶし
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(0, 0, 320, 120);
+        
+        // ドットを描画
+        ctx.fillStyle = '#000000';
+        for (let i = 0; i < this.currentBinaryData.length; i++) {
+            if (this.currentBinaryData[i]) {
+                const x = i % 320;
+                const y = Math.floor(i / 320);
+                ctx.fillRect(x, y, 1, 1);
+            }
+        }
+        
+        // キャンバスをPNGとしてダウンロード
+        const url = canvas.toDataURL('image/png');
+        
+        // ダウンロードリンクを作成してクリック
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `splatoon3-drawing-${new Date().toISOString().slice(0, 10)}.png`;
+        document.body.appendChild(a);
+        a.click();
+        
+        // クリーンアップ
+        document.body.removeChild(a);
+        
+        this.addLog('ダウンロードが完了しました', 'success');
     }
 
     clearAll() {
@@ -2680,7 +2855,7 @@ class CalibrationManager {
     }
 
     updateValues() {
-        // 速度スライダーの値を取得（50〜200、デフォルト100）
+        // 速度スライダーの値を取得（50〜1000、デフォルト100）
         const speedValue = parseInt(this.speedInput?.value || 100);
 
         // speedValueは描画速度を表す（大きい = 速い）
@@ -2688,8 +2863,8 @@ class CalibrationManager {
         // 反比例関係: speedMultiplier = 10000 / (speedValue * 100)
         const speedMultiplier = 10000 / (speedValue * 100);
 
-        // 基準値（1.0xの場合、250ms/px = 旧0.8x相当）
-        // ユーザー要望により、より確実な描画設定を標準(1.0x)とする
+        // 基準値（1.0xの場合、250ms/px）
+        // ユーザー報告に基づき、より確実な「安全な速度」に戻す
         const basePressMs = 125;
         const baseReleaseMs = 75;
         const baseWaitMs = 50;
@@ -2703,6 +2878,30 @@ class CalibrationManager {
         const displaySpeed = speedValue / 100.0;
         if (this.speedValue) {
             this.speedValue.textContent = `${displaySpeed.toFixed(1)}x`;
+        }
+
+        // 描画中ならリアルタイムで反映
+        if (window.ghostDrawerApp && window.ghostDrawerApp.isPainting) {
+            // デバウンス処理（頻繁なAPI呼び出しを防ぐ）
+            if (this.updateTimeout) {
+                clearTimeout(this.updateTimeout);
+            }
+            this.updateTimeout = setTimeout(async () => {
+                try {
+                    await fetch('/api/painting/timing', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            press_ms: pressMs,
+                            release_ms: releaseMs,
+                            wait_ms: waitMs
+                        })
+                    });
+                    console.log(`Updated timing: ${pressMs}/${releaseMs}/${waitMs} ms`);
+                } catch (error) {
+                    console.error('Failed to update timing:', error);
+                }
+            }, 200);
         }
 
         // 描画準備モーダルの値も更新
@@ -2740,10 +2939,10 @@ class CalibrationManager {
         // 反比例関係: speedMultiplier = 10000 / (speedValue * 100)
         const speedMultiplier = 10000 / (speedValue * 100);
 
-        // 基準値（1.0xの場合、200ms/px）
-        const basePressMs = 100;
-        const baseReleaseMs = 60;
-        const baseWaitMs = 40;
+        // 基準値（1.0xの場合、250ms/px）
+        const basePressMs = 125;
+        const baseReleaseMs = 75;
+        const baseWaitMs = 50;
 
         return {
             pressMs: Math.round(basePressMs * speedMultiplier),

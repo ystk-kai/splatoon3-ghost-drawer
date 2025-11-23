@@ -7,13 +7,14 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use tokio::sync::RwLock;
 use tracing::{error, info, warn};
 
 // Import domain entities
 use super::error_response::ErrorResponse;
 use super::dto::{StrategyStats, StrategyComparisonResponse};
+use super::models::UpdateTimingRequest;
 use crate::domain::artwork::entities::{Artwork, ArtworkMetadata, Canvas, Dot};
 use crate::domain::shared::value_objects::{Color, Coordinates};
 use crate::domain::painting::{ArtworkToCommandConverter, DrawingCanvasConfig, DrawingStrategy};
@@ -70,17 +71,25 @@ fn tap_dpad_with_duration(
     Ok(())
 }
 
-#[derive(Clone)]
+
 pub struct PaintingControl {
     pub stop_signal: Arc<AtomicBool>,
     pub pause_signal: Arc<AtomicBool>,
+    pub repeats: Arc<AtomicU32>,
+    pub press_ms: Arc<AtomicU64>,
+    pub release_ms: Arc<AtomicU64>,
+    pub wait_ms: Arc<AtomicU64>,
 }
 
 impl PaintingControl {
-    pub fn new() -> Self {
+    pub fn new(initial_repeats: u32, press_ms: u32, release_ms: u32, wait_ms: u32) -> Self {
         Self {
             stop_signal: Arc::new(AtomicBool::new(false)),
             pause_signal: Arc::new(AtomicBool::new(false)),
+            repeats: Arc::new(AtomicU32::new(initial_repeats)),
+            press_ms: Arc::new(AtomicU64::new(press_ms as u64)),
+            release_ms: Arc::new(AtomicU64::new(release_ms as u64)),
+            wait_ms: Arc::new(AtomicU64::new(wait_ms as u64)),
         }
     }
 }
@@ -150,6 +159,12 @@ pub struct PaintRequest {
     pub wait_ms: Option<u32>,
     pub preview: Option<bool>,
     pub strategy: Option<DrawingStrategy>,
+    pub repeats: Option<u32>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateRepeatsRequest {
+    pub repeats: u32,
 }
 
 #[derive(Debug, Deserialize)]
@@ -358,48 +373,57 @@ pub async fn get_artwork_strategies(
 
     match artworks.get(&id) {
         Some(artwork) => {
-            let strategies = vec![
-                DrawingStrategy::GreedyTwoOpt,
-                DrawingStrategy::NearestNeighbor,
-                DrawingStrategy::ZigZag,
-                DrawingStrategy::RasterScan,
-            ];
+            let artwork_clone = artwork.clone();
+            
+            // Calculate strategies in a blocking thread to avoid blocking the async runtime
+            let stats_list = tokio::task::spawn_blocking(move || {
+                let strategies = vec![
+                    DrawingStrategy::GreedyTwoOpt,
+                    DrawingStrategy::NearestNeighbor,
+                    DrawingStrategy::ZigZag,
+                    DrawingStrategy::RasterScan,
+                ];
 
-            let mut stats_list = Vec::new();
+                let mut list = Vec::new();
 
-            for strategy in strategies {
-                let config = DrawingCanvasConfig::default();
-                let converter = ArtworkToCommandConverter::new(config, strategy);
-                let drawing_path = converter.create_drawing_path(&artwork.canvas);
+                for strategy in strategies {
+                    let config = DrawingCanvasConfig::default();
+                    let converter = ArtworkToCommandConverter::new(config, strategy);
+                    let drawing_path = converter.create_drawing_path(&artwork_clone.canvas);
 
-                // Calculate operations
-                let mut dpad_operations = 0;
-                let mut a_button_presses = 0;
-                
-                // Initial position (0,0)
-                let mut current_x = 0;
-                let mut current_y = 0;
+                    // Calculate operations
+                    let mut dpad_operations = 0;
+                    let mut a_button_presses = 0;
+                    
+                    // Initial position (0,0)
+                    let mut current_x = 0;
+                    let mut current_y = 0;
 
-                for coord in &drawing_path.coordinates {
-                    // Move operations
-                    let dx = (coord.x as i32 - current_x as i32).abs();
-                    let dy = (coord.y as i32 - current_y as i32).abs();
-                    dpad_operations += (dx + dy) as usize;
+                    for coord in &drawing_path.coordinates {
+                        // Move operations
+                        let dx = (coord.x as i32 - current_x as i32).abs();
+                        let dy = (coord.y as i32 - current_y as i32).abs();
+                        dpad_operations += (dx + dy) as usize;
 
-                    // Paint operation
-                    a_button_presses += 1;
+                        // Paint operation
+                        a_button_presses += 1;
 
-                    current_x = coord.x;
-                    current_y = coord.y;
+                        current_x = coord.x;
+                        current_y = coord.y;
+                    }
+
+                    list.push(StrategyStats {
+                        strategy,
+                        dpad_operations,
+                        a_button_presses,
+                        estimated_time_seconds: drawing_path.estimated_time_ms as f64 / 1000.0,
+                    });
                 }
-
-                stats_list.push(StrategyStats {
-                    strategy,
-                    dpad_operations,
-                    a_button_presses,
-                    estimated_time_seconds: drawing_path.estimated_time_ms as f64 / 1000.0,
-                });
-            }
+                list
+            }).await.map_err(|e| {
+                error!("Strategy calculation task failed: {}", e);
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?;
 
             Ok(Json(StrategyComparisonResponse {
                 strategies: stats_list,
@@ -455,6 +479,58 @@ pub async fn pause_painting(
     }
 }
 
+/// Update repeats for current painting
+pub async fn update_painting_repeats(
+    State(state): State<Arc<ArtworkState>>,
+    Json(request): Json<UpdateRepeatsRequest>,
+) -> Result<Json<ApiResponse>, StatusCode> {
+    let active_painting = state.active_painting.read().await;
+    
+    if let Some(control) = active_painting.as_ref() {
+        let repeats = request.repeats.max(1);
+        control.repeats.store(repeats, Ordering::SeqCst);
+        
+        info!("Updated painting repeats to {}", repeats);
+        
+        Ok(Json(ApiResponse {
+            success: true,
+            message: format!("Repeats updated to {}", repeats),
+        }))
+    } else {
+        Ok(Json(ApiResponse {
+            success: false,
+            message: "No active painting found".to_string(),
+        }))
+    }
+}
+
+/// Update timing for current painting
+pub async fn update_painting_timing(
+    State(state): State<Arc<ArtworkState>>,
+    Json(request): Json<UpdateTimingRequest>,
+) -> Result<Json<ApiResponse>, StatusCode> {
+    let active_painting = state.active_painting.read().await;
+    
+    if let Some(control) = active_painting.as_ref() {
+        control.press_ms.store(request.press_ms as u64, Ordering::SeqCst);
+        control.release_ms.store(request.release_ms as u64, Ordering::SeqCst);
+        control.wait_ms.store(request.wait_ms as u64, Ordering::SeqCst);
+        
+        info!("Updated painting timing to press={}ms, release={}ms, wait={}ms", 
+              request.press_ms, request.release_ms, request.wait_ms);
+        
+        Ok(Json(ApiResponse {
+            success: true,
+            message: format!("Timing updated to {}/{}/{} ms", request.press_ms, request.release_ms, request.wait_ms),
+        }))
+    } else {
+        Ok(Json(ApiResponse {
+            success: false,
+            message: "No active painting found".to_string(),
+        }))
+    }
+}
+
 /// Paint an artwork
 pub async fn paint_artwork(
     State(state): State<Arc<ArtworkState>>,
@@ -470,19 +546,24 @@ pub async fn paint_artwork(
             let wait_ms = request.wait_ms.unwrap_or(40);
             let preview = request.preview.unwrap_or(false);
             let strategy = request.strategy.unwrap_or(DrawingStrategy::GreedyTwoOpt);
+            let repeats = request.repeats.unwrap_or(1).max(1); // Ensure at least 1 repeat
 
             info!(
-                "Starting painting for artwork {} (timing: {}+{}+{}ms/px, preview: {}, strategy: {:?})",
-                id, press_ms, release_ms, wait_ms, preview, strategy
+                "Starting painting for artwork {} (timing: {}+{}+{}ms/px, preview: {}, strategy: {:?}, repeats: {})",
+                id, press_ms, release_ms, wait_ms, preview, strategy, repeats
             );
 
             let artwork_clone = artwork.clone();
             let controller = state.controller.clone();
 
             // Setup control signals
-            let control = PaintingControl::new();
+            let control = PaintingControl::new(repeats, press_ms, release_ms, wait_ms as u32);
             let stop_signal = control.stop_signal.clone();
             let pause_signal = control.pause_signal.clone();
+            let repeats_signal = control.repeats.clone();
+            let press_signal = control.press_ms.clone();
+            let release_signal = control.release_ms.clone();
+            let wait_signal = control.wait_ms.clone();
 
             // Store active painting control
             {
@@ -496,7 +577,7 @@ pub async fn paint_artwork(
             tokio::spawn(async move {
                 // Run blocking controller operations in a blocking thread
                 let result = tokio::task::spawn_blocking(move || {
-                    perform_painting(controller, artwork_clone, press_ms, release_ms, wait_ms as u64, strategy, stop_signal, pause_signal)
+                    perform_painting(controller, artwork_clone, press_signal, release_signal, wait_signal, strategy, stop_signal, pause_signal, repeats_signal)
                 }).await;
 
                 // Clear active painting when done
@@ -512,7 +593,7 @@ pub async fn paint_artwork(
                 }
             });
 
-            let total_ms_per_px = press_ms + release_ms + wait_ms;
+            let total_ms_per_px = (press_ms + release_ms + wait_ms) * repeats;
             let estimated_time = (artwork.drawable_dots() as f64 * total_ms_per_px as f64) / 1000.0;
 
             Ok(Json(ApiResponse {
@@ -527,13 +608,19 @@ pub async fn paint_artwork(
 fn perform_painting(
     controller: Arc<dyn ControllerEmulator>,
     artwork: Artwork,
-    press_ms: u32,
-    release_ms: u32,
-    wait_ms: u64,
+    press_signal: Arc<AtomicU64>,
+    release_signal: Arc<AtomicU64>,
+    wait_signal: Arc<AtomicU64>,
     strategy: DrawingStrategy,
     stop_signal: Arc<AtomicBool>,
     pause_signal: Arc<AtomicBool>,
+    repeats_signal: Arc<AtomicU32>,
 ) -> Result<(), HardwareError> {
+    let mut press_ms = press_signal.load(Ordering::SeqCst) as u32;
+    let mut release_ms = release_signal.load(Ordering::SeqCst) as u32;
+    let mut wait_ms = wait_signal.load(Ordering::SeqCst) as u64;
+
+    error!("DEBUG: perform_painting STARTED. repeats={}", repeats_signal.load(Ordering::SeqCst));
     info!("Initializing painting sequence...");
 
     // Check stop signal
@@ -544,12 +631,21 @@ fn perform_painting(
         return Ok(());
     }
 
+    use crate::interfaces::web::log_streamer::PROGRESS_CHANNEL;
+    let send_status = |msg: &str| {
+        let _ = PROGRESS_CHANNEL.send(serde_json::json!({
+            "type": "progress",
+            "status_message": msg
+        }).to_string());
+    };
+
     // 1. Initialization Sequence
     // Press L multiple times to ensure pen size is set to small
     // Pen size cycles: small → medium → large → small
     // Press 5 times to guarantee we cycle through all sizes and land on small
     // (Even if some presses are missed, we should still reach small)
     info!("Setting pen size to small (pressing L button 5 times)...");
+    send_status("ペンサイズを初期化中");
     for i in 1..=5 {
         info!("Pressing L button ({}/5)...", i);
         tap_button(&controller, Button::L, &format!("L Tap {}", i))?;
@@ -572,6 +668,7 @@ fn perform_painting(
     // Switch-Fightstick uses ~250 frames (~4 seconds) of left stick at minimum position
     // StickPosition: x=0 is LEFT, y=0 is UP, so (0,0) moves to top-left
     info!("Moving to home position (Top-Left) using left stick...");
+    send_status("初期位置(左上)へ移動中");
 
     // Move to top-left corner using left stick (5 seconds to ensure we hit the edge)
     let move_home_cmd = ControllerCommand::new("Move Home Left Stick")
@@ -612,11 +709,17 @@ fn perform_painting(
     // - press_ms: 方向キーを保持する時間
     // - release_ms: ニュートラル状態を保持する時間
     // - wait_ms: 入力間の追加待機時間
-    // Total time per pixel = press_ms + release_ms + wait_ms
-
-    info!("Using timing: press={}ms, release={}ms, wait={}ms", press_ms, release_ms, wait_ms);
+    // Total time per pixel = (press_ms + release_ms + wait_ms) * repeats
+    let initial_repeats = repeats_signal.load(Ordering::SeqCst);
+    info!("Using timing: press={}ms, release={}ms, wait={}ms, initial_repeats={}", press_ms, release_ms, wait_ms, initial_repeats);
+    send_status("描画を開始します");
 
     for (i, coords) in dots_to_paint.into_iter().enumerate() {
+        // Update timing from signals
+        press_ms = press_signal.load(Ordering::Relaxed) as u32;
+        release_ms = release_signal.load(Ordering::Relaxed) as u32;
+        wait_ms = wait_signal.load(Ordering::Relaxed) as u64;
+
         // Check stop signal
         if stop_signal.load(Ordering::SeqCst) {
             info!("Painting stopped by user");
@@ -652,6 +755,22 @@ fn perform_painting(
                 tap_dpad_with_duration(&controller, DPad::RIGHT, "Move Right", press_ms, release_ms, wait_ms)?;
                 dpad_operations += 1;
                 current_x += 1;
+                
+                // Send intermediate update every step for smooth preview
+                let _ = PROGRESS_CHANNEL.send(serde_json::json!({
+                    "type": "progress",
+                    "current": i + 1,
+                    "total": total_dots,
+                    "x": current_x,
+                    "y": current_y,
+                    "dpad_operations": dpad_operations,
+                    "a_button_presses": a_button_presses,
+                    "is_paint": false
+                }).to_string());
+                // Periodic delay for long movements to prevent drift
+                if dpad_operations % 15 == 0 {
+                    std::thread::sleep(std::time::Duration::from_millis(100));
+                }
             }
         } else if dx < 0 {
             for _ in 0..dx.abs() {
@@ -659,7 +778,29 @@ fn perform_painting(
                 tap_dpad_with_duration(&controller, DPad::LEFT, "Move Left", press_ms, release_ms, wait_ms)?;
                 dpad_operations += 1;
                 current_x -= 1;
+
+                // Send intermediate update every step for smooth preview
+                let _ = PROGRESS_CHANNEL.send(serde_json::json!({
+                    "type": "progress",
+                    "current": i + 1,
+                    "total": total_dots,
+                    "x": current_x,
+                    "y": current_y,
+                    "dpad_operations": dpad_operations,
+                    "a_button_presses": a_button_presses,
+                    "is_paint": false
+                }).to_string());
+                
+                // Periodic delay for long movements to prevent drift
+                if dpad_operations % 15 == 0 {
+                    std::thread::sleep(std::time::Duration::from_millis(100));
+                }
             }
+        }
+
+        // Axis change delay
+        if dx != 0 && dy != 0 {
+            std::thread::sleep(std::time::Duration::from_millis(50));
         }
 
         // Move Y
@@ -669,6 +810,22 @@ fn perform_painting(
                 tap_dpad_with_duration(&controller, DPad::DOWN, "Move Down", press_ms, release_ms, wait_ms)?;
                 dpad_operations += 1;
                 current_y += 1;
+
+                // Send intermediate update every step for smooth preview
+                let _ = PROGRESS_CHANNEL.send(serde_json::json!({
+                    "type": "progress",
+                    "current": i + 1,
+                    "total": total_dots,
+                    "x": current_x,
+                    "y": current_y,
+                    "dpad_operations": dpad_operations,
+                    "a_button_presses": a_button_presses,
+                    "is_paint": false
+                }).to_string());
+                // Periodic delay for long movements to prevent drift
+                if dpad_operations % 15 == 0 {
+                    std::thread::sleep(std::time::Duration::from_millis(100));
+                }
             }
         } else if dy < 0 {
             for _ in 0..dy.abs() {
@@ -676,6 +833,23 @@ fn perform_painting(
                 tap_dpad_with_duration(&controller, DPad::UP, "Move Up", press_ms, release_ms, wait_ms)?;
                 dpad_operations += 1;
                 current_y -= 1;
+
+                // Send intermediate update every step for smooth preview
+                let _ = PROGRESS_CHANNEL.send(serde_json::json!({
+                    "type": "progress",
+                    "current": i + 1,
+                    "total": total_dots,
+                    "x": current_x,
+                    "y": current_y,
+                    "dpad_operations": dpad_operations,
+                    "a_button_presses": a_button_presses,
+                    "is_paint": false
+                }).to_string());
+
+                // Periodic delay for long movements to prevent drift
+                if dpad_operations % 15 == 0 {
+                    std::thread::sleep(std::time::Duration::from_millis(100));
+                }
             }
         }
 
@@ -696,9 +870,14 @@ fn perform_painting(
         // D-pad状態を完全にクリア（描画前）
         tap_dpad_with_duration(&controller, DPad::NEUTRAL, "Clear DPad Before Paint", 10, 10, 0)?;
 
-        // Paint Dot (Press A)
-        tap_button_with_duration(&controller, Button::A, "Paint Dot", press_ms, release_ms, wait_ms)?;
-        a_button_presses += 1;
+        // Paint Dot (Press A) - Repeat as requested
+        let current_repeats = repeats_signal.load(Ordering::SeqCst);
+        for r in 0..current_repeats {
+            if stop_signal.load(Ordering::SeqCst) { return Ok(()); }
+            tap_button_with_duration(&controller, Button::A, &format!("Paint Dot {}/{}", r+1, current_repeats), press_ms, release_ms, wait_ms)?;
+            a_button_presses += 1;
+        }
+
 
         // Send paint progress update
         let progress_msg = serde_json::json!({
@@ -995,7 +1174,7 @@ pub async fn start_calibration(
     let skip_initialization = request.skip_initialization;
 
     // Setup control signals
-    let control = PaintingControl::new();
+    let control = PaintingControl::new(1, press_ms, release_ms, wait_ms);
     let stop_signal = control.stop_signal.clone();
 
     // Store active painting control
@@ -1078,7 +1257,7 @@ pub async fn start_paint_move_test(
     let release_ms = request.release_ms;
     let wait_ms = request.wait_ms;
 
-    let control = PaintingControl::new();
+    let control = PaintingControl::new(1, press_ms, release_ms, wait_ms);
     let stop_signal = control.stop_signal.clone();
 
     {
@@ -1142,7 +1321,7 @@ pub async fn start_gap_move_test(
     let release_ms = request.release_ms;
     let wait_ms = request.wait_ms;
 
-    let control = PaintingControl::new();
+    let control = PaintingControl::new(1, press_ms, release_ms, wait_ms);
     let stop_signal = control.stop_signal.clone();
 
     {

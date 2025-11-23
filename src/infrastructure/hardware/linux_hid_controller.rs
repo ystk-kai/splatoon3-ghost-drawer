@@ -290,6 +290,7 @@ impl ControllerEmulator for LinuxHidController {
                 return Ok(false);
             }
 
+            // UDCの状態確認（権限エラーはエラーとして扱う＝厳格なチェック）
             let udc_content = std::fs::read_to_string(gadget_path).map_err(|e| {
                 error!("Failed to read UDC status: {}", e);
                 HardwareError::IoError(e)
@@ -304,22 +305,30 @@ impl ControllerEmulator for LinuxHidController {
             }
 
             // 実際にHIDデバイスに書き込めるかテスト（接続状態の確認）
-            match OpenOptions::new().write(true).open(path) {
+            // O_NONBLOCKを使用して、ブロッキングを防ぎつつ厳格にチェックする
+            use std::os::unix::fs::OpenOptionsExt;
+            match OpenOptions::new()
+                .write(true)
+                .custom_flags(libc::O_NONBLOCK) // ノンブロッキングモード
+                .open(path) 
+            {
                 Ok(mut file) => {
                     // NEUTRAL状態のレポートを送信してテスト
-                    // Pokken Controller uses 8-byte reports
-                    // [Buttons_L, Buttons_H, HAT, LX, LY, RX, RY, 0x00]
-                    // NEUTRAL: No buttons, HAT=0x08, sticks centered at 0x80
                     let test_report = [0x00, 0x00, 0x08, 0x80, 0x80, 0x80, 0x80, 0x00];
                     match file.write_all(&test_report) {
                         Ok(_) => {
-                            debug!("HID device is writable and connected");
+                            debug!("HID device is writable and connected (Non-blocking check passed)");
                             Ok(true)
                         }
                         Err(e) => {
-                            if e.kind() == std::io::ErrorKind::BrokenPipe
-                                || e.raw_os_error() == Some(108)
-                            // ESHUTDOWN
+                            if e.kind() == std::io::ErrorKind::WouldBlock {
+                                // ブロックされる＝ホストがポーリングしていない可能性があるが、
+                                // デバイスファイルが開けている以上、物理的には接続されているとみなす。
+                                // ここでfalseを返すと、ポーリング間隔のタイミング次第で「未接続」と判定されてしまう。
+                                debug!("HID device write would block (Buffer full or Host not polling). Assuming connected.");
+                                Ok(true)
+                            } else if e.kind() == std::io::ErrorKind::BrokenPipe
+                                || e.raw_os_error() == Some(108) // ESHUTDOWN
                             {
                                 warn!("HID device not ready: {}", e);
                                 Ok(false)
@@ -359,12 +368,13 @@ impl ControllerEmulator for LinuxHidController {
                     // これにより、意図しないスティック入力を防ぐ
                     drop(state);
                     // 押下中は継続的にレポートを送信（8ms間隔 = 125Hz）
-                    let report_interval = 8u64;
-                    let mut elapsed = 0u64;
-                    while elapsed < action.duration_ms as u64 {
+                    let start_time = std::time::Instant::now();
+                    let duration = Duration::from_millis(action.duration_ms as u64);
+                    let report_interval = Duration::from_millis(8);
+                    
+                    while start_time.elapsed() < duration {
                         self.send_report()?;
-                        thread::sleep(Duration::from_millis(report_interval));
-                        elapsed += report_interval;
+                        thread::sleep(report_interval);
                     }
                 }
                 ActionType::ReleaseButton(button) => {
@@ -378,12 +388,13 @@ impl ControllerEmulator for LinuxHidController {
                     // スティックの値は変更しない（現在の値を維持）
                     drop(state);
                     // リリース中も継続的にレポートを送信（8ms間隔 = 125Hz）
-                    let report_interval = 8u64;
-                    let mut elapsed = 0u64;
-                    while elapsed < action.duration_ms as u64 {
+                    let start_time = std::time::Instant::now();
+                    let duration = Duration::from_millis(action.duration_ms as u64);
+                    let report_interval = Duration::from_millis(8);
+                    
+                    while start_time.elapsed() < duration {
                         self.send_report()?;
-                        thread::sleep(Duration::from_millis(report_interval));
-                        elapsed += report_interval;
+                        thread::sleep(report_interval);
                     }
                 }
                 ActionType::SetDPad(dpad) => {
@@ -397,12 +408,13 @@ impl ControllerEmulator for LinuxHidController {
                     // これにより、D-pad使用時にスティックからの意図しない入力を防ぐ
                     drop(state);
                     // DPad入力中も継続的にレポートを送信（8ms間隔 = 125Hz）
-                    let report_interval = 8u64;
-                    let mut elapsed = 0u64;
-                    while elapsed < action.duration_ms as u64 {
+                    let start_time = std::time::Instant::now();
+                    let duration = Duration::from_millis(action.duration_ms as u64);
+                    let report_interval = Duration::from_millis(8);
+                    
+                    while start_time.elapsed() < duration {
                         self.send_report()?;
-                        thread::sleep(Duration::from_millis(report_interval));
-                        elapsed += report_interval;
+                        thread::sleep(report_interval);
                     }
                 }
                 ActionType::MoveLeftStick(position) => {
@@ -411,12 +423,13 @@ impl ControllerEmulator for LinuxHidController {
                     state.left_stick_y = position.y;
                     drop(state);
                     // 左スティック入力中も継続的にレポートを送信（8ms間隔 = 125Hz）
-                    let report_interval = 8u64;
-                    let mut elapsed = 0u64;
-                    while elapsed < action.duration_ms as u64 {
+                    let start_time = std::time::Instant::now();
+                    let duration = Duration::from_millis(action.duration_ms as u64);
+                    let report_interval = Duration::from_millis(8);
+                    
+                    while start_time.elapsed() < duration {
                         self.send_report()?;
-                        thread::sleep(Duration::from_millis(report_interval));
-                        elapsed += report_interval;
+                        thread::sleep(report_interval);
                     }
                     // スティック移動後、自動的に中央に戻す
                     // CENTER (128, 128) でない場合のみリセット
@@ -428,7 +441,7 @@ impl ControllerEmulator for LinuxHidController {
                         // ニュートラル状態を確実に送信
                         for _ in 0..5 {
                             self.send_report()?;
-                            thread::sleep(Duration::from_millis(report_interval));
+                            thread::sleep(report_interval);
                         }
                     }
                 }

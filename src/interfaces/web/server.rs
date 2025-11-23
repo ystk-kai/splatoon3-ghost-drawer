@@ -3,6 +3,7 @@ use super::{
     get_hardware_status, get_system_info, list_artworks, paint_artwork, upload_artwork,
     websocket_handler, stop_painting, pause_painting, start_calibration,
     start_paint_move_test, start_gap_move_test, get_artwork_path, get_artwork_strategies,
+    update_painting_repeats, update_painting_timing,
 };
 use axum::{
     Router,
@@ -58,6 +59,8 @@ pub async fn create_server(host: String, port: u16) -> anyhow::Result<()> {
         )
         .route("/api/artworks/{id}/path", get(get_artwork_path))
         .route("/api/artworks/{id}/strategies", get(get_artwork_strategies))
+        .route("/api/painting/repeats", post(update_painting_repeats))
+        .route("/api/painting/timing", post(update_painting_timing))
         .route("/api/artworks/{id}/paint", post(paint_artwork))
         .route("/api/painting/stop", post(stop_painting))
         .route("/api/painting/pause", post(pause_painting))

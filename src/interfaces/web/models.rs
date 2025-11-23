@@ -47,3 +47,9 @@ impl Default for CalibrationRequest {
 }
 
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateTimingRequest {
+    pub press_ms: u32,
+    pub release_ms: u32,
+    pub wait_ms: u32,
+}
