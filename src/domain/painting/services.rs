@@ -100,7 +100,7 @@ impl ArtworkToCommandConverter {
     }
 
     /// 描画パスを生成
-    fn create_drawing_path(&self, canvas: &Canvas) -> DrawingPath {
+    pub fn create_drawing_path(&self, canvas: &Canvas) -> DrawingPath {
         let drawable_dots = canvas.drawable_dots();
         let coordinates: Vec<Coordinates> = match self.strategy {
             DrawingStrategy::RasterScan => {
@@ -142,6 +142,11 @@ impl ArtworkToCommandConverter {
             DrawingStrategy::NearestNeighbor => {
                 // 最近傍探索（簡易版）
                 self.nearest_neighbor_path(drawable_dots)
+            }
+            DrawingStrategy::GreedyTwoOpt => {
+                // Greedy + 2-opt最適化
+                let path = self.nearest_neighbor_path(drawable_dots);
+                self.two_opt_optimize(path)
             }
             DrawingStrategy::Spiral => {
                 // スパイラルパターン（未実装、ラスタースキャンにフォールバック）
@@ -189,6 +194,53 @@ impl ArtworkToCommandConverter {
             current = remaining.remove(nearest_idx);
             path.push(current);
         }
+
+        path
+    }
+
+    /// 2-optアルゴリズムによるパスの最適化
+    fn two_opt_optimize(&self, mut path: Vec<Coordinates>) -> Vec<Coordinates> {
+        let n = path.len();
+        if n < 4 {
+            return path;
+        }
+
+        let mut improved = true;
+        let mut iterations = 0;
+        // 無限ループ防止と処理時間制限のための最大反復回数
+        const MAX_ITERATIONS: usize = 50;
+
+        while improved && iterations < MAX_ITERATIONS {
+            improved = false;
+            iterations += 1;
+
+            for i in 0..n - 2 {
+                // jはi+2から開始（隣接するエッジは交換の意味がないため）
+                for j in i + 2..n - 1 {
+                    let p1 = path[i];
+                    let p2 = path[i + 1];
+                    let p3 = path[j];
+                    let p4 = path[j + 1];
+
+                    // 現在の距離（p1->p2 + p3->p4）
+                    let current_dist = p1.manhattan_distance_to(&p2) + p3.manhattan_distance_to(&p4);
+                    // 交換後の距離（p1->p3 + p2->p4）
+                    // p1からp3へ行き、そこから逆順にp2へ戻り、p4へ向かう
+                    let new_dist = p1.manhattan_distance_to(&p3) + p2.manhattan_distance_to(&p4);
+
+                    if new_dist < current_dist {
+                        // セグメント[i+1..=j]を反転
+                        path[i + 1..=j].reverse();
+                        improved = true;
+                    }
+                }
+            }
+        }
+
+        info!(
+            "2-opt optimization finished after {} iterations",
+            iterations
+        );
 
         path
     }
@@ -289,5 +341,60 @@ impl ArtworkToCommandConverter {
             .add_action(ControllerAction::wait(1000))
             .add_action(ControllerAction::press_button(Button::HOME, 100))
             .add_action(ControllerAction::release_button(Button::HOME, 500))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::painting::value_objects::DrawingMode;
+
+    #[test]
+    fn test_two_opt_optimize_removes_crossing() {
+        let config = DrawingCanvasConfig {
+            width: 100,
+            height: 100,
+            cursor_speed_ms: 10,
+            dot_draw_delay_ms: 10,
+            line_wrap_delay_ms: 10,
+            drawing_mode: DrawingMode::PixelPen,
+        };
+        let strategy = DrawingStrategy::GreedyTwoOpt;
+        let converter = ArtworkToCommandConverter::new(config, strategy);
+
+        // Create a path with a crossing: (0,0) -> (10,10) -> (0,10) -> (10,0)
+        // Crosses like an X
+        let path = vec![
+            Coordinates::new(0, 0),
+            Coordinates::new(10, 10),
+            Coordinates::new(0, 10),
+            Coordinates::new(10, 0),
+        ];
+
+        let optimized = converter.two_opt_optimize(path.clone());
+
+        // Calculate distances
+        let original_dist: u32 = path
+            .windows(2)
+            .map(|w| w[0].manhattan_distance_to(&w[1]))
+            .sum();
+            
+        let optimized_dist: u32 = optimized
+            .windows(2)
+            .map(|w| w[0].manhattan_distance_to(&w[1]))
+            .sum();
+
+        println!("Original distance: {}", original_dist);
+        println!("Optimized distance: {}", optimized_dist);
+
+        assert!(optimized_dist < original_dist, "Optimized path should be shorter");
+        assert_eq!(optimized.len(), path.len(), "Path length should be preserved");
+        
+        // Check if start point is preserved (optional, but usually desired for first point)
+        // Note: 2-opt might reverse the whole path or segments, but usually we fix start if needed.
+        // In my implementation, I start swapping from i=0, so path[0] is fixed as p1 in the first iteration?
+        // Actually, i goes from 0 to n-2. p1 = path[i]. 
+        // If i=0, p1=path[0]. We swap path[i+1..=j]. So path[0] is never moved.
+        assert_eq!(optimized[0], path[0], "Start point should be preserved");
     }
 }

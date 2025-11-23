@@ -176,6 +176,8 @@ pub enum DrawingStrategy {
     ZigZag,
     /// 最近傍探索（移動距離最小化）
     NearestNeighbor,
+    /// Greedy + 2-opt最適化
+    GreedyTwoOpt,
     /// スパイラル（渦巻き）パターン
     Spiral,
 }
