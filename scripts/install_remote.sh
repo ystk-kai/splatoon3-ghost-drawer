@@ -20,4 +20,4 @@ echo "Running setup..."
 
 echo "Restarting service..."
 systemctl restart splatoon3-ghost-drawer.service
-systemctl status splatoon3-ghost-drawer.service
+systemctl status splatoon3-ghost-drawer.service --no-pager
