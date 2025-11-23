@@ -162,7 +162,7 @@ impl ArtworkToCommandConverter {
         path
     }
 
-    /// 最近傍探索でパスを生成
+    /// 最近傍探索でパスを生成（グリッド最適化版）
     fn nearest_neighbor_path(
         &self,
         drawable_dots: Vec<(&Coordinates, &crate::domain::artwork::entities::Dot)>,
@@ -171,28 +171,125 @@ impl ArtworkToCommandConverter {
             return Vec::new();
         }
 
-        let mut remaining: Vec<_> = drawable_dots.into_iter().map(|(coord, _)| *coord).collect();
-        let mut path = Vec::new();
+        let total_dots = drawable_dots.len();
+        let mut path = Vec::with_capacity(total_dots);
 
-        // 最初の点（左上）
-        let start_idx = remaining
-            .iter()
-            .position(|c| c.x == remaining.iter().map(|c| c.x).min().unwrap_or(0))
-            .unwrap_or(0);
-        let mut current = remaining.remove(start_idx);
-        path.push(current);
+        // グリッドサイズ（バケットサイズ）
+        // 320x120のキャンバスに対して10x10のグリッドを作成
+        const GRID_SIZE: i16 = 10;
+        const GRID_COLS: usize = (320 / GRID_SIZE as usize) + 1;
+        const GRID_ROWS: usize = (120 / GRID_SIZE as usize) + 1;
 
-        // 最近傍を探しながらパスを構築
-        while !remaining.is_empty() {
-            let nearest_idx = remaining
-                .iter()
-                .enumerate()
-                .min_by_key(|(_, coord)| current.manhattan_distance_to(coord))
-                .map(|(idx, _)| idx)
-                .unwrap_or(0);
+        // グリッドの初期化
+        let mut grid: Vec<Vec<Vec<Coordinates>>> = vec![vec![Vec::new(); GRID_COLS]; GRID_ROWS];
+        
+        // 全点をグリッドに配置
+        for (coord, _) in drawable_dots {
+            let col = (coord.x as usize) / (GRID_SIZE as usize);
+            let row = (coord.y as usize) / (GRID_SIZE as usize);
+            if row < GRID_ROWS && col < GRID_COLS {
+                grid[row][col].push(*coord);
+            }
+        }
 
-            current = remaining.remove(nearest_idx);
-            path.push(current);
+        // 最初の点（左上）を探す
+        // グリッドの左上から順に探して最初に見つかった点を使用
+        let mut current = Coordinates::new(0, 0);
+        let mut found_start = false;
+        
+        'start_search: for row in 0..GRID_ROWS {
+            for col in 0..GRID_COLS {
+                if !grid[row][col].is_empty() {
+                    // バケット内で最も左上の点を探す
+                    let mut min_idx = 0;
+                    let mut min_val = i32::MAX;
+                    
+                    for (i, p) in grid[row][col].iter().enumerate() {
+                        let val = p.x as i32 + p.y as i32;
+                        if val < min_val {
+                            min_val = val;
+                            min_idx = i;
+                        }
+                    }
+                    
+                    current = grid[row][col].swap_remove(min_idx);
+                    path.push(current);
+                    found_start = true;
+                    break 'start_search;
+                }
+            }
+        }
+
+        if !found_start {
+            return Vec::new();
+        }
+
+        // 残りの点を探索
+        for _ in 1..total_dots {
+            let current_col = (current.x as usize) / (GRID_SIZE as usize);
+            let current_row = (current.y as usize) / (GRID_SIZE as usize);
+            
+            let mut nearest_dist = u32::MAX;
+            let mut nearest_point = Coordinates::new(0, 0);
+            let mut found_bucket_row = 0;
+            let mut found_bucket_col = 0;
+            let mut found_idx = 0;
+            let mut found = false;
+
+            // 近隣のバケットから探索範囲を広げていく
+            // 半径0（自身のバケット）から開始
+            let max_radius = std::cmp::max(GRID_ROWS, GRID_COLS);
+            
+            'search: for radius in 0..=max_radius {
+                // 探索範囲のバケットをチェック
+                let r_min = (current_row as isize - radius as isize).max(0) as usize;
+                let r_max = (current_row as isize + radius as isize).min(GRID_ROWS as isize - 1) as usize;
+                let c_min = (current_col as isize - radius as isize).max(0) as usize;
+                let c_max = (current_col as isize + radius as isize).min(GRID_COLS as isize - 1) as usize;
+
+                let mut found_in_radius = false;
+
+                for r in r_min..=r_max {
+                    for c in c_min..=c_max {
+                        // 半径のエッジにあるバケットのみをチェック（内側は既にチェック済み）
+                        // ただしradius=0の場合はチェックする
+                        let is_edge = radius == 0 || 
+                                      r == r_min || r == r_max || 
+                                      c == c_min || c == c_max;
+                        
+                        if is_edge && !grid[r][c].is_empty() {
+                            for (i, p) in grid[r][c].iter().enumerate() {
+                                let dist = current.manhattan_distance_to(p);
+                                if dist < nearest_dist {
+                                    nearest_dist = dist;
+                                    nearest_point = *p;
+                                    found_bucket_row = r;
+                                    found_bucket_col = c;
+                                    found_idx = i;
+                                    found = true;
+                                    found_in_radius = true;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // この半径で見つかり、かつ次の半径の最小距離よりも近ければ確定
+                // （マンハッタン距離なので、グリッド境界までの距離を考慮する必要があるが、
+                //  簡易的に「見つかったら終了」とする。厳密な最近傍でなくても十分）
+                if found_in_radius {
+                    break 'search;
+                }
+            }
+
+            if found {
+                // 見つかった点を削除してパスに追加
+                grid[found_bucket_row][found_bucket_col].swap_remove(found_idx);
+                current = nearest_point;
+                path.push(current);
+            } else {
+                break; // 点が見つからない（通常ありえない）
+            }
         }
 
         path
@@ -210,13 +307,20 @@ impl ArtworkToCommandConverter {
         // 無限ループ防止と処理時間制限のための最大反復回数
         const MAX_ITERATIONS: usize = 50;
 
+        // 探索ウィンドウサイズ（近傍のみを探索して計算量を削減）
+        // 全点対全点だとO(N^2)で38400点の場合に数分かかるため、
+        // 前後500点程度に制限してO(N*K)にする
+        const WINDOW_SIZE: usize = 500;
+
         while improved && iterations < MAX_ITERATIONS {
             improved = false;
             iterations += 1;
 
             for i in 0..n - 2 {
-                // jはi+2から開始（隣接するエッジは交換の意味がないため）
-                for j in i + 2..n - 1 {
+                // jはi+2から開始し、ウィンドウサイズまたは配列末尾まで
+                let end_j = std::cmp::min(i + WINDOW_SIZE, n - 1);
+                
+                for j in i + 2..end_j {
                     let p1 = path[i];
                     let p2 = path[i + 1];
                     let p3 = path[j];
