@@ -1,6 +1,6 @@
 use axum::{
     Json,
-    extract::{Multipart, Path, State},
+    extract::{Multipart, Path, State, Query},
     http::StatusCode,
     response::IntoResponse,
 };
@@ -13,8 +13,10 @@ use tracing::{error, info, warn};
 
 // Import domain entities
 use super::error_response::ErrorResponse;
+use super::dto::{StrategyStats, StrategyComparisonResponse};
 use crate::domain::artwork::entities::{Artwork, ArtworkMetadata, Canvas, Dot};
 use crate::domain::shared::value_objects::{Color, Coordinates};
+use crate::domain::painting::{ArtworkToCommandConverter, DrawingCanvasConfig, DrawingStrategy};
 
 use crate::domain::controller::{Button, ControllerAction, ControllerCommand, ControllerEmulator, DPad, StickPosition};
 use crate::domain::hardware::errors::HardwareError;
@@ -147,6 +149,18 @@ pub struct PaintRequest {
     pub release_ms: Option<u32>,
     pub wait_ms: Option<u32>,
     pub preview: Option<bool>,
+    pub strategy: Option<DrawingStrategy>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct GetPathRequest {
+    pub strategy: Option<DrawingStrategy>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct PathResponse {
+    pub path: Vec<Coordinates>,
+    pub estimated_time_sec: f64,
 }
 
 /// List all artworks
@@ -311,6 +325,90 @@ pub async fn delete_artwork(
     }
 }
 
+/// Get drawing path for an artwork
+pub async fn get_artwork_path(
+    State(state): State<Arc<ArtworkState>>,
+    Path(id): Path<String>,
+    Query(params): Query<GetPathRequest>,
+) -> Result<Json<PathResponse>, StatusCode> {
+    let artworks = state.artworks.read().await;
+
+    match artworks.get(&id) {
+        Some(artwork) => {
+            let strategy = params.strategy.unwrap_or(DrawingStrategy::GreedyTwoOpt);
+            let config = DrawingCanvasConfig::default();
+            let converter = ArtworkToCommandConverter::new(config, strategy);
+            let drawing_path = converter.create_drawing_path(&artwork.canvas);
+            
+            Ok(Json(PathResponse {
+                path: drawing_path.coordinates,
+                estimated_time_sec: drawing_path.estimated_time_ms as f64 / 1000.0,
+            }))
+        }
+        None => Err(StatusCode::NOT_FOUND),
+    }
+}
+
+/// Get stats for all drawing strategies
+pub async fn get_artwork_strategies(
+    State(state): State<Arc<ArtworkState>>,
+    Path(id): Path<String>,
+) -> Result<Json<StrategyComparisonResponse>, StatusCode> {
+    let artworks = state.artworks.read().await;
+
+    match artworks.get(&id) {
+        Some(artwork) => {
+            let strategies = vec![
+                DrawingStrategy::GreedyTwoOpt,
+                DrawingStrategy::NearestNeighbor,
+                DrawingStrategy::ZigZag,
+                DrawingStrategy::RasterScan,
+            ];
+
+            let mut stats_list = Vec::new();
+
+            for strategy in strategies {
+                let config = DrawingCanvasConfig::default();
+                let converter = ArtworkToCommandConverter::new(config, strategy);
+                let drawing_path = converter.create_drawing_path(&artwork.canvas);
+
+                // Calculate operations
+                let mut dpad_operations = 0;
+                let mut a_button_presses = 0;
+                
+                // Initial position (0,0)
+                let mut current_x = 0;
+                let mut current_y = 0;
+
+                for coord in &drawing_path.coordinates {
+                    // Move operations
+                    let dx = (coord.x as i32 - current_x as i32).abs();
+                    let dy = (coord.y as i32 - current_y as i32).abs();
+                    dpad_operations += (dx + dy) as usize;
+
+                    // Paint operation
+                    a_button_presses += 1;
+
+                    current_x = coord.x;
+                    current_y = coord.y;
+                }
+
+                stats_list.push(StrategyStats {
+                    strategy,
+                    dpad_operations,
+                    a_button_presses,
+                    estimated_time_seconds: drawing_path.estimated_time_ms as f64 / 1000.0,
+                });
+            }
+
+            Ok(Json(StrategyComparisonResponse {
+                strategies: stats_list,
+            }))
+        }
+        None => Err(StatusCode::NOT_FOUND),
+    }
+}
+
 /// Stop current painting
 pub async fn stop_painting(
     State(state): State<Arc<ArtworkState>>,
@@ -371,10 +469,11 @@ pub async fn paint_artwork(
             let release_ms = request.release_ms.unwrap_or(60);
             let wait_ms = request.wait_ms.unwrap_or(40);
             let preview = request.preview.unwrap_or(false);
+            let strategy = request.strategy.unwrap_or(DrawingStrategy::GreedyTwoOpt);
 
             info!(
-                "Starting painting for artwork {} (timing: {}+{}+{}ms/px, preview: {})",
-                id, press_ms, release_ms, wait_ms, preview
+                "Starting painting for artwork {} (timing: {}+{}+{}ms/px, preview: {}, strategy: {:?})",
+                id, press_ms, release_ms, wait_ms, preview, strategy
             );
 
             let artwork_clone = artwork.clone();
@@ -397,7 +496,7 @@ pub async fn paint_artwork(
             tokio::spawn(async move {
                 // Run blocking controller operations in a blocking thread
                 let result = tokio::task::spawn_blocking(move || {
-                    perform_painting(controller, artwork_clone, press_ms, release_ms, wait_ms as u64, stop_signal, pause_signal)
+                    perform_painting(controller, artwork_clone, press_ms, release_ms, wait_ms as u64, strategy, stop_signal, pause_signal)
                 }).await;
 
                 // Clear active painting when done
@@ -431,6 +530,7 @@ fn perform_painting(
     press_ms: u32,
     release_ms: u32,
     wait_ms: u64,
+    strategy: DrawingStrategy,
     stop_signal: Arc<AtomicBool>,
     pause_signal: Arc<AtomicBool>,
 ) -> Result<(), HardwareError> {
@@ -487,39 +587,18 @@ fn perform_painting(
     let total_dots = artwork.drawable_dots();
     info!("Starting dot painting... Total dots: {}", total_dots);
 
-    // Sort dots using Boustrophedon pattern (serpentine/zigzag order)
-    // Even rows (0, 2, 4...): Left to Right
-    // Odd rows (1, 3, 5...): Right to Left
-    // This minimizes cursor movement and improves drawing efficiency
+    // Generate drawing path using the selected strategy
+    info!("Generating drawing path using strategy: {:?}", strategy);
+    let config = DrawingCanvasConfig {
+        cursor_speed_ms: 100, // These values are used for estimation, not actual drawing
+        dot_draw_delay_ms: 100,
+        ..Default::default()
+    };
+    let converter = ArtworkToCommandConverter::new(config, strategy);
+    let drawing_path = converter.create_drawing_path(&artwork.canvas);
+    let dots_to_paint = drawing_path.coordinates;
 
-    use std::collections::HashMap;
-
-    // Group dots by row (y coordinate)
-    let mut rows: HashMap<u16, Vec<_>> = HashMap::new();
-    for (coords, dot) in artwork.canvas.dots.iter() {
-        rows.entry(coords.y).or_insert_with(Vec::new).push((coords, dot));
-    }
-
-    // Sort rows by y coordinate and build final dot list
-    let mut sorted_y: Vec<_> = rows.keys().cloned().collect();
-    sorted_y.sort();
-
-    let mut dots = Vec::new();
-    for y in sorted_y {
-        let mut row_dots = rows.remove(&y).unwrap();
-
-        // Sort by x coordinate
-        row_dots.sort_by_key(|(coords, _)| coords.x);
-
-        // Reverse odd rows for Boustrophedon pattern
-        if y % 2 == 1 {
-            row_dots.reverse();
-        }
-
-        dots.extend(row_dots);
-    }
-
-    info!("Using Boustrophedon pattern for efficient drawing");
+    info!("Path generated with {} dots", dots_to_paint.len());
 
     let mut current_x = 0;
     let mut current_y = 0;
@@ -537,7 +616,7 @@ fn perform_painting(
 
     info!("Using timing: press={}ms, release={}ms, wait={}ms", press_ms, release_ms, wait_ms);
 
-    for (i, (coords, _dot)) in dots.into_iter().enumerate() {
+    for (i, coords) in dots_to_paint.into_iter().enumerate() {
         // Check stop signal
         if stop_signal.load(Ordering::SeqCst) {
             info!("Painting stopped by user");
@@ -566,95 +645,53 @@ fn perform_painting(
         let dx = target_x as i32 - current_x as i32;
         let dy = target_y as i32 - current_y as i32;
 
-        // Move X first (horizontal movement for left-to-right scanning)
+        // Move X first
         if dx > 0 {
             for _ in 0..dx {
+                if stop_signal.load(Ordering::SeqCst) { return Ok(()); } // Check stop signal during movement
                 tap_dpad_with_duration(&controller, DPad::RIGHT, "Move Right", press_ms, release_ms, wait_ms)?;
                 dpad_operations += 1;
                 current_x += 1;
-
-                // Send cursor move update
-                use crate::interfaces::web::log_streamer::PROGRESS_CHANNEL;
-                let move_msg = serde_json::json!({
-                    "type": "progress",
-                    "current": i + 1,
-                    "total": total_dots,
-                    "x": current_x,
-                    "y": current_y,
-                    "dpad_operations": dpad_operations,
-                    "a_button_presses": a_button_presses,
-                    "is_paint": false
-                }).to_string();
-                let _ = PROGRESS_CHANNEL.send(move_msg);
             }
         } else if dx < 0 {
             for _ in 0..dx.abs() {
+                if stop_signal.load(Ordering::SeqCst) { return Ok(()); } // Check stop signal during movement
                 tap_dpad_with_duration(&controller, DPad::LEFT, "Move Left", press_ms, release_ms, wait_ms)?;
                 dpad_operations += 1;
                 current_x -= 1;
-
-                // Send cursor move update
-                use crate::interfaces::web::log_streamer::PROGRESS_CHANNEL;
-                let move_msg = serde_json::json!({
-                    "type": "progress",
-                    "current": i + 1,
-                    "total": total_dots,
-                    "x": current_x,
-                    "y": current_y,
-                    "dpad_operations": dpad_operations,
-                    "a_button_presses": a_button_presses,
-                    "is_paint": false
-                }).to_string();
-                let _ = PROGRESS_CHANNEL.send(move_msg);
             }
         }
 
-        // Move Y (vertical movement)
+        // Move Y
         if dy > 0 {
             for _ in 0..dy {
+                if stop_signal.load(Ordering::SeqCst) { return Ok(()); } // Check stop signal during movement
                 tap_dpad_with_duration(&controller, DPad::DOWN, "Move Down", press_ms, release_ms, wait_ms)?;
                 dpad_operations += 1;
                 current_y += 1;
-
-                // Send cursor move update
-                use crate::interfaces::web::log_streamer::PROGRESS_CHANNEL;
-                let move_msg = serde_json::json!({
-                    "type": "progress",
-                    "current": i + 1,
-                    "total": total_dots,
-                    "x": current_x,
-                    "y": current_y,
-                    "dpad_operations": dpad_operations,
-                    "a_button_presses": a_button_presses,
-                    "is_paint": false
-                }).to_string();
-                let _ = PROGRESS_CHANNEL.send(move_msg);
             }
         } else if dy < 0 {
-            // This should NOT happen in normal Z-order scanning (top-to-bottom)
-            // If this happens, there's a bug in sorting or position tracking
-            warn!("UNEXPECTED UP movement: dy={}, current=({},{}), target=({},{})",
-                  dy, current_x, current_y, target_x, target_y);
             for _ in 0..dy.abs() {
+                if stop_signal.load(Ordering::SeqCst) { return Ok(()); } // Check stop signal during movement
                 tap_dpad_with_duration(&controller, DPad::UP, "Move Up", press_ms, release_ms, wait_ms)?;
                 dpad_operations += 1;
                 current_y -= 1;
-
-                // Send cursor move update
-                use crate::interfaces::web::log_streamer::PROGRESS_CHANNEL;
-                let move_msg = serde_json::json!({
-                    "type": "progress",
-                    "current": i + 1,
-                    "total": total_dots,
-                    "x": current_x,
-                    "y": current_y,
-                    "dpad_operations": dpad_operations,
-                    "a_button_presses": a_button_presses,
-                    "is_paint": false
-                }).to_string();
-                let _ = PROGRESS_CHANNEL.send(move_msg);
             }
         }
+
+        // Send cursor move update (only once per dot to avoid flooding)
+        use crate::interfaces::web::log_streamer::PROGRESS_CHANNEL;
+        let move_msg = serde_json::json!({
+            "type": "progress",
+            "current": i + 1,
+            "total": total_dots,
+            "x": current_x,
+            "y": current_y,
+            "dpad_operations": dpad_operations,
+            "a_button_presses": a_button_presses,
+            "is_paint": false
+        }).to_string();
+        let _ = PROGRESS_CHANNEL.send(move_msg);
 
         // D-pad状態を完全にクリア（描画前）
         tap_dpad_with_duration(&controller, DPad::NEUTRAL, "Clear DPad Before Paint", 10, 10, 0)?;
@@ -664,7 +701,6 @@ fn perform_painting(
         a_button_presses += 1;
 
         // Send paint progress update
-        use crate::interfaces::web::log_streamer::PROGRESS_CHANNEL;
         let progress_msg = serde_json::json!({
             "type": "progress",
             "current": i + 1,
