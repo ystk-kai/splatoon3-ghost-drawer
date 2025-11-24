@@ -1,6 +1,6 @@
 use axum::{
     Json,
-    extract::{Multipart, Path, State, Query},
+    extract::{Multipart, Path, Query, State},
     http::StatusCode,
     response::IntoResponse,
 };
@@ -12,18 +12,24 @@ use tokio::sync::RwLock;
 use tracing::{error, info, warn};
 
 // Import domain entities
+use super::dto::{StrategyComparisonResponse, StrategyStats};
 use super::error_response::ErrorResponse;
-use super::dto::{StrategyStats, StrategyComparisonResponse};
 use super::models::UpdateTimingRequest;
 use crate::domain::artwork::entities::{Artwork, ArtworkMetadata, Canvas, Dot};
-use crate::domain::shared::value_objects::{Color, Coordinates};
 use crate::domain::painting::{ArtworkToCommandConverter, DrawingCanvasConfig, DrawingStrategy};
+use crate::domain::shared::value_objects::{Color, Coordinates};
 
-use crate::domain::controller::{Button, ControllerAction, ControllerCommand, ControllerEmulator, DPad, StickPosition};
+use crate::domain::controller::{
+    Button, ControllerAction, ControllerCommand, ControllerEmulator, DPad, StickPosition,
+};
 use crate::domain::hardware::errors::HardwareError;
 
 /// ボタンを1回タップする共通処理（デフォルト: 押下300ms、離す200ms、待機400ms）
-fn tap_button(controller: &Arc<dyn ControllerEmulator>, button: Button, name: &str) -> Result<(), HardwareError> {
+fn tap_button(
+    controller: &Arc<dyn ControllerEmulator>,
+    button: Button,
+    name: &str,
+) -> Result<(), HardwareError> {
     tap_button_with_duration(controller, button, name, 300, 200, 400)
 }
 
@@ -48,7 +54,11 @@ fn tap_button_with_duration(
 
 /// 十字キーを1回タップする共通処理（デフォルト: 押下100ms、離す50ms、待機50ms）
 #[allow(dead_code)]
-fn tap_dpad(controller: &Arc<dyn ControllerEmulator>, dpad: DPad, name: &str) -> Result<(), HardwareError> {
+fn tap_dpad(
+    controller: &Arc<dyn ControllerEmulator>,
+    dpad: DPad,
+    name: &str,
+) -> Result<(), HardwareError> {
     tap_dpad_with_duration(controller, dpad, name, 100, 50, 50)
 }
 
@@ -71,7 +81,7 @@ fn tap_dpad_with_duration(
     Ok(())
 }
 
-
+#[derive(Clone)]
 pub struct PaintingControl {
     pub stop_signal: Arc<AtomicBool>,
     pub pause_signal: Arc<AtomicBool>,
@@ -354,7 +364,7 @@ pub async fn get_artwork_path(
             let config = DrawingCanvasConfig::default();
             let converter = ArtworkToCommandConverter::new(config, strategy);
             let drawing_path = converter.create_drawing_path(&artwork.canvas);
-            
+
             Ok(Json(PathResponse {
                 path: drawing_path.coordinates,
                 estimated_time_sec: drawing_path.estimated_time_ms as f64 / 1000.0,
@@ -374,7 +384,7 @@ pub async fn get_artwork_strategies(
     match artworks.get(&id) {
         Some(artwork) => {
             let artwork_clone = artwork.clone();
-            
+
             // Calculate strategies in a blocking thread to avoid blocking the async runtime
             let stats_list = tokio::task::spawn_blocking(move || {
                 let strategies = vec![
@@ -394,7 +404,7 @@ pub async fn get_artwork_strategies(
                     // Calculate operations
                     let mut dpad_operations = 0;
                     let mut a_button_presses = 0;
-                    
+
                     // Initial position (0,0)
                     let mut current_x = 0;
                     let mut current_y = 0;
@@ -420,7 +430,9 @@ pub async fn get_artwork_strategies(
                     });
                 }
                 list
-            }).await.map_err(|e| {
+            })
+            .await
+            .map_err(|e| {
                 error!("Strategy calculation task failed: {}", e);
                 StatusCode::INTERNAL_SERVER_ERROR
             })?;
@@ -459,14 +471,14 @@ pub async fn pause_painting(
     State(state): State<Arc<ArtworkState>>,
 ) -> Result<Json<ApiResponse>, StatusCode> {
     let active_painting = state.active_painting.read().await;
-    
+
     if let Some(control) = active_painting.as_ref() {
         let current = control.pause_signal.load(Ordering::SeqCst);
         control.pause_signal.store(!current, Ordering::SeqCst);
-        
+
         let status = if !current { "paused" } else { "resumed" };
         info!("Painting {}", status);
-        
+
         Ok(Json(ApiResponse {
             success: true,
             message: format!("Painting {}", status),
@@ -485,13 +497,13 @@ pub async fn update_painting_repeats(
     Json(request): Json<UpdateRepeatsRequest>,
 ) -> Result<Json<ApiResponse>, StatusCode> {
     let active_painting = state.active_painting.read().await;
-    
+
     if let Some(control) = active_painting.as_ref() {
         let repeats = request.repeats.max(1);
         control.repeats.store(repeats, Ordering::SeqCst);
-        
+
         info!("Updated painting repeats to {}", repeats);
-        
+
         Ok(Json(ApiResponse {
             success: true,
             message: format!("Repeats updated to {}", repeats),
@@ -510,18 +522,29 @@ pub async fn update_painting_timing(
     Json(request): Json<UpdateTimingRequest>,
 ) -> Result<Json<ApiResponse>, StatusCode> {
     let active_painting = state.active_painting.read().await;
-    
+
     if let Some(control) = active_painting.as_ref() {
-        control.press_ms.store(request.press_ms as u64, Ordering::SeqCst);
-        control.release_ms.store(request.release_ms as u64, Ordering::SeqCst);
-        control.wait_ms.store(request.wait_ms as u64, Ordering::SeqCst);
-        
-        info!("Updated painting timing to press={}ms, release={}ms, wait={}ms", 
-              request.press_ms, request.release_ms, request.wait_ms);
-        
+        control
+            .press_ms
+            .store(request.press_ms as u64, Ordering::SeqCst);
+        control
+            .release_ms
+            .store(request.release_ms as u64, Ordering::SeqCst);
+        control
+            .wait_ms
+            .store(request.wait_ms as u64, Ordering::SeqCst);
+
+        info!(
+            "Updated painting timing to press={}ms, release={}ms, wait={}ms",
+            request.press_ms, request.release_ms, request.wait_ms
+        );
+
         Ok(Json(ApiResponse {
             success: true,
-            message: format!("Timing updated to {}/{}/{} ms", request.press_ms, request.release_ms, request.wait_ms),
+            message: format!(
+                "Timing updated to {}/{}/{} ms",
+                request.press_ms, request.release_ms, request.wait_ms
+            ),
         }))
     } else {
         Ok(Json(ApiResponse {
@@ -557,18 +580,12 @@ pub async fn paint_artwork(
             let controller = state.controller.clone();
 
             // Setup control signals
-            let control = PaintingControl::new(repeats, press_ms, release_ms, wait_ms as u32);
-            let stop_signal = control.stop_signal.clone();
-            let pause_signal = control.pause_signal.clone();
-            let repeats_signal = control.repeats.clone();
-            let press_signal = control.press_ms.clone();
-            let release_signal = control.release_ms.clone();
-            let wait_signal = control.wait_ms.clone();
+            let control = PaintingControl::new(repeats, press_ms, release_ms, wait_ms);
 
             // Store active painting control
             {
                 let mut active = state.active_painting.write().await;
-                *active = Some(control);
+                *active = Some(control.clone());
             }
 
             let active_painting_store = state.active_painting.clone();
@@ -577,8 +594,9 @@ pub async fn paint_artwork(
             tokio::spawn(async move {
                 // Run blocking controller operations in a blocking thread
                 let result = tokio::task::spawn_blocking(move || {
-                    perform_painting(controller, artwork_clone, press_signal, release_signal, wait_signal, strategy, stop_signal, pause_signal, repeats_signal)
-                }).await;
+                    perform_painting(controller, artwork_clone, strategy, control)
+                })
+                .await;
 
                 // Clear active painting when done
                 {
@@ -598,7 +616,10 @@ pub async fn paint_artwork(
 
             Ok(Json(ApiResponse {
                 success: true,
-                message: format!("Painting started (estimated time: {:.1} seconds)", estimated_time),
+                message: format!(
+                    "Painting started (estimated time: {:.1} seconds)",
+                    estimated_time
+                ),
             }))
         }
         None => Err(StatusCode::NOT_FOUND),
@@ -608,35 +629,43 @@ pub async fn paint_artwork(
 fn perform_painting(
     controller: Arc<dyn ControllerEmulator>,
     artwork: Artwork,
-    press_signal: Arc<AtomicU64>,
-    release_signal: Arc<AtomicU64>,
-    wait_signal: Arc<AtomicU64>,
     strategy: DrawingStrategy,
-    stop_signal: Arc<AtomicBool>,
-    pause_signal: Arc<AtomicBool>,
-    repeats_signal: Arc<AtomicU32>,
+    control: PaintingControl,
 ) -> Result<(), HardwareError> {
-    let mut press_ms = press_signal.load(Ordering::SeqCst) as u32;
-    let mut release_ms = release_signal.load(Ordering::SeqCst) as u32;
-    let mut wait_ms = wait_signal.load(Ordering::SeqCst) as u64;
+    let mut press_ms = control.press_ms.load(Ordering::SeqCst) as u32;
+    let mut release_ms = control.release_ms.load(Ordering::SeqCst) as u32;
+    let mut wait_ms = control.wait_ms.load(Ordering::SeqCst);
 
-    error!("DEBUG: perform_painting STARTED. repeats={}", repeats_signal.load(Ordering::SeqCst));
+    error!(
+        "DEBUG: perform_painting STARTED. repeats={}",
+        control.repeats.load(Ordering::SeqCst)
+    );
     info!("Initializing painting sequence...");
 
     // Check stop signal
-    if stop_signal.load(Ordering::SeqCst) {
+    if control.stop_signal.load(Ordering::SeqCst) {
         // 停止時も必ずNEUTRAL状態にリセット
-        tap_dpad_with_duration(&controller, DPad::NEUTRAL, "Final Reset on Stop", 100, 100, 0)?;
+        tap_dpad_with_duration(
+            &controller,
+            DPad::NEUTRAL,
+            "Final Reset on Stop",
+            100,
+            100,
+            0,
+        )?;
         std::thread::sleep(std::time::Duration::from_millis(200));
         return Ok(());
     }
 
     use crate::interfaces::web::log_streamer::PROGRESS_CHANNEL;
     let send_status = |msg: &str| {
-        let _ = PROGRESS_CHANNEL.send(serde_json::json!({
-            "type": "progress",
-            "status_message": msg
-        }).to_string());
+        let _ = PROGRESS_CHANNEL.send(
+            serde_json::json!({
+                "type": "progress",
+                "status_message": msg
+            })
+            .to_string(),
+        );
     };
 
     // 1. Initialization Sequence
@@ -657,9 +686,16 @@ fn perform_painting(
     std::thread::sleep(std::time::Duration::from_millis(500));
 
     // Check stop signal
-    if stop_signal.load(Ordering::SeqCst) {
+    if control.stop_signal.load(Ordering::SeqCst) {
         // 停止時も必ずNEUTRAL状態にリセット
-        tap_dpad_with_duration(&controller, DPad::NEUTRAL, "Final Reset on Stop", 100, 100, 0)?;
+        tap_dpad_with_duration(
+            &controller,
+            DPad::NEUTRAL,
+            "Final Reset on Stop",
+            100,
+            100,
+            0,
+        )?;
         std::thread::sleep(std::time::Duration::from_millis(200));
         return Ok(());
     }
@@ -672,8 +708,14 @@ fn perform_painting(
 
     // Move to top-left corner using left stick (5 seconds to ensure we hit the edge)
     let move_home_cmd = ControllerCommand::new("Move Home Left Stick")
-        .add_action(ControllerAction::move_left_stick(StickPosition::new(0, 0), 5000))
-        .add_action(ControllerAction::move_left_stick(StickPosition::CENTER, 100));
+        .add_action(ControllerAction::move_left_stick(
+            StickPosition::new(0, 0),
+            5000,
+        ))
+        .add_action(ControllerAction::move_left_stick(
+            StickPosition::CENTER,
+            100,
+        ));
     controller.execute_command(&move_home_cmd)?;
 
     info!("Home position reached (0, 0)");
@@ -710,31 +752,48 @@ fn perform_painting(
     // - release_ms: ニュートラル状態を保持する時間
     // - wait_ms: 入力間の追加待機時間
     // Total time per pixel = (press_ms + release_ms + wait_ms) * repeats
-    let initial_repeats = repeats_signal.load(Ordering::SeqCst);
-    info!("Using timing: press={}ms, release={}ms, wait={}ms, initial_repeats={}", press_ms, release_ms, wait_ms, initial_repeats);
+    let initial_repeats = control.repeats.load(Ordering::SeqCst);
+    info!(
+        "Using timing: press={}ms, release={}ms, wait={}ms, initial_repeats={}",
+        press_ms, release_ms, wait_ms, initial_repeats
+    );
     send_status("描画を開始します");
 
     for (i, coords) in dots_to_paint.into_iter().enumerate() {
         // Update timing from signals
-        press_ms = press_signal.load(Ordering::Relaxed) as u32;
-        release_ms = release_signal.load(Ordering::Relaxed) as u32;
-        wait_ms = wait_signal.load(Ordering::Relaxed) as u64;
+        press_ms = control.press_ms.load(Ordering::Relaxed) as u32;
+        release_ms = control.release_ms.load(Ordering::Relaxed) as u32;
+        wait_ms = control.wait_ms.load(Ordering::Relaxed);
 
         // Check stop signal
-        if stop_signal.load(Ordering::SeqCst) {
+        if control.stop_signal.load(Ordering::SeqCst) {
             info!("Painting stopped by user");
             // 停止時も必ずNEUTRAL状態にリセット
-            tap_dpad_with_duration(&controller, DPad::NEUTRAL, "Final Reset on Stop", 100, 100, 0)?;
+            tap_dpad_with_duration(
+                &controller,
+                DPad::NEUTRAL,
+                "Final Reset on Stop",
+                100,
+                100,
+                0,
+            )?;
             std::thread::sleep(std::time::Duration::from_millis(200));
             return Ok(());
         }
 
         // Check pause signal
-        while pause_signal.load(Ordering::SeqCst) {
-            if stop_signal.load(Ordering::SeqCst) {
+        while control.pause_signal.load(Ordering::SeqCst) {
+            if control.stop_signal.load(Ordering::SeqCst) {
                 info!("Painting stopped by user while paused");
                 // 停止時も必ずNEUTRAL状態にリセット
-                tap_dpad_with_duration(&controller, DPad::NEUTRAL, "Final Reset on Stop", 100, 100, 0)?;
+                tap_dpad_with_duration(
+                    &controller,
+                    DPad::NEUTRAL,
+                    "Final Reset on Stop",
+                    100,
+                    100,
+                    0,
+                )?;
                 std::thread::sleep(std::time::Duration::from_millis(200));
                 return Ok(());
             }
@@ -745,54 +804,78 @@ fn perform_painting(
         let target_y = coords.y;
 
         // Calculate movement
-        let dx = target_x as i32 - current_x as i32;
-        let dy = target_y as i32 - current_y as i32;
+        let dx = target_x as i32 - current_x;
+        let dy = target_y as i32 - current_y;
 
         // Move X first
         if dx > 0 {
             for _ in 0..dx {
-                if stop_signal.load(Ordering::SeqCst) { return Ok(()); } // Check stop signal during movement
-                tap_dpad_with_duration(&controller, DPad::RIGHT, "Move Right", press_ms, release_ms, wait_ms)?;
+                if control.stop_signal.load(Ordering::SeqCst) {
+                    return Ok(());
+                } // Check stop signal during movement
+                tap_dpad_with_duration(
+                    &controller,
+                    DPad::RIGHT,
+                    "Move Right",
+                    press_ms,
+                    release_ms,
+                    wait_ms,
+                )?;
                 dpad_operations += 1;
                 current_x += 1;
-                
+
                 // Send intermediate update every step for smooth preview
-                let _ = PROGRESS_CHANNEL.send(serde_json::json!({
-                    "type": "progress",
-                    "current": i + 1,
-                    "total": total_dots,
-                    "x": current_x,
-                    "y": current_y,
-                    "dpad_operations": dpad_operations,
-                    "a_button_presses": a_button_presses,
-                    "is_paint": false
-                }).to_string());
+                let _ = PROGRESS_CHANNEL.send(
+                    serde_json::json!({
+                        "type": "progress",
+                        "current": i + 1,
+                        "total": total_dots,
+                        "x": current_x,
+                        "y": current_y,
+                        "dpad_operations": dpad_operations,
+                        "a_button_presses": a_button_presses,
+                        "is_paint": false
+                    })
+                    .to_string(),
+                );
                 // Periodic delay for long movements to prevent drift
-                if dpad_operations % 15 == 0 {
+                if dpad_operations.is_multiple_of(15) {
                     std::thread::sleep(std::time::Duration::from_millis(100));
                 }
             }
         } else if dx < 0 {
             for _ in 0..dx.abs() {
-                if stop_signal.load(Ordering::SeqCst) { return Ok(()); } // Check stop signal during movement
-                tap_dpad_with_duration(&controller, DPad::LEFT, "Move Left", press_ms, release_ms, wait_ms)?;
+                if control.stop_signal.load(Ordering::SeqCst) {
+                    return Ok(());
+                } // Check stop signal during movement
+                tap_dpad_with_duration(
+                    &controller,
+                    DPad::LEFT,
+                    "Move Left",
+                    press_ms,
+                    release_ms,
+                    wait_ms,
+                )?;
                 dpad_operations += 1;
                 current_x -= 1;
 
                 // Send intermediate update every step for smooth preview
-                let _ = PROGRESS_CHANNEL.send(serde_json::json!({
-                    "type": "progress",
-                    "current": i + 1,
-                    "total": total_dots,
-                    "x": current_x,
-                    "y": current_y,
-                    "dpad_operations": dpad_operations,
-                    "a_button_presses": a_button_presses,
-                    "is_paint": false
-                }).to_string());
-                
+                let _ = PROGRESS_CHANNEL.send(
+                    serde_json::json!({
+                        "type": "progress",
+                        "current": i + 1,
+                        "total": total_dots,
+                        "x": current_x,
+                        "y": current_y,
+                        "dpad_operations": dpad_operations,
+                        "a_button_presses": a_button_presses,
+                        "is_paint": false
+                    })
+                    .to_string(),
+                );
+
                 // Periodic delay for long movements to prevent drift
-                if dpad_operations % 15 == 0 {
+                if dpad_operations.is_multiple_of(15) {
                     std::thread::sleep(std::time::Duration::from_millis(100));
                 }
             }
@@ -806,48 +889,72 @@ fn perform_painting(
         // Move Y
         if dy > 0 {
             for _ in 0..dy {
-                if stop_signal.load(Ordering::SeqCst) { return Ok(()); } // Check stop signal during movement
-                tap_dpad_with_duration(&controller, DPad::DOWN, "Move Down", press_ms, release_ms, wait_ms)?;
+                if control.stop_signal.load(Ordering::SeqCst) {
+                    return Ok(());
+                } // Check stop signal during movement
+                tap_dpad_with_duration(
+                    &controller,
+                    DPad::DOWN,
+                    "Move Down",
+                    press_ms,
+                    release_ms,
+                    wait_ms,
+                )?;
                 dpad_operations += 1;
                 current_y += 1;
 
                 // Send intermediate update every step for smooth preview
-                let _ = PROGRESS_CHANNEL.send(serde_json::json!({
-                    "type": "progress",
-                    "current": i + 1,
-                    "total": total_dots,
-                    "x": current_x,
-                    "y": current_y,
-                    "dpad_operations": dpad_operations,
-                    "a_button_presses": a_button_presses,
-                    "is_paint": false
-                }).to_string());
+                let _ = PROGRESS_CHANNEL.send(
+                    serde_json::json!({
+                        "type": "progress",
+                        "current": i + 1,
+                        "total": total_dots,
+                        "x": current_x,
+                        "y": current_y,
+                        "dpad_operations": dpad_operations,
+                        "a_button_presses": a_button_presses,
+                        "is_paint": false
+                    })
+                    .to_string(),
+                );
                 // Periodic delay for long movements to prevent drift
-                if dpad_operations % 15 == 0 {
+                if dpad_operations.is_multiple_of(15) {
                     std::thread::sleep(std::time::Duration::from_millis(100));
                 }
             }
         } else if dy < 0 {
             for _ in 0..dy.abs() {
-                if stop_signal.load(Ordering::SeqCst) { return Ok(()); } // Check stop signal during movement
-                tap_dpad_with_duration(&controller, DPad::UP, "Move Up", press_ms, release_ms, wait_ms)?;
+                if control.stop_signal.load(Ordering::SeqCst) {
+                    return Ok(());
+                } // Check stop signal during movement
+                tap_dpad_with_duration(
+                    &controller,
+                    DPad::UP,
+                    "Move Up",
+                    press_ms,
+                    release_ms,
+                    wait_ms,
+                )?;
                 dpad_operations += 1;
                 current_y -= 1;
 
                 // Send intermediate update every step for smooth preview
-                let _ = PROGRESS_CHANNEL.send(serde_json::json!({
-                    "type": "progress",
-                    "current": i + 1,
-                    "total": total_dots,
-                    "x": current_x,
-                    "y": current_y,
-                    "dpad_operations": dpad_operations,
-                    "a_button_presses": a_button_presses,
-                    "is_paint": false
-                }).to_string());
+                let _ = PROGRESS_CHANNEL.send(
+                    serde_json::json!({
+                        "type": "progress",
+                        "current": i + 1,
+                        "total": total_dots,
+                        "x": current_x,
+                        "y": current_y,
+                        "dpad_operations": dpad_operations,
+                        "a_button_presses": a_button_presses,
+                        "is_paint": false
+                    })
+                    .to_string(),
+                );
 
                 // Periodic delay for long movements to prevent drift
-                if dpad_operations % 15 == 0 {
+                if dpad_operations.is_multiple_of(15) {
                     std::thread::sleep(std::time::Duration::from_millis(100));
                 }
             }
@@ -864,20 +971,36 @@ fn perform_painting(
             "dpad_operations": dpad_operations,
             "a_button_presses": a_button_presses,
             "is_paint": false
-        }).to_string();
+        })
+        .to_string();
         let _ = PROGRESS_CHANNEL.send(move_msg);
 
         // D-pad状態を完全にクリア（描画前）
-        tap_dpad_with_duration(&controller, DPad::NEUTRAL, "Clear DPad Before Paint", 10, 10, 0)?;
+        tap_dpad_with_duration(
+            &controller,
+            DPad::NEUTRAL,
+            "Clear DPad Before Paint",
+            10,
+            10,
+            0,
+        )?;
 
         // Paint Dot (Press A) - Repeat as requested
-        let current_repeats = repeats_signal.load(Ordering::SeqCst);
+        let current_repeats = control.repeats.load(Ordering::SeqCst);
         for r in 0..current_repeats {
-            if stop_signal.load(Ordering::SeqCst) { return Ok(()); }
-            tap_button_with_duration(&controller, Button::A, &format!("Paint Dot {}/{}", r+1, current_repeats), press_ms, release_ms, wait_ms)?;
+            if control.stop_signal.load(Ordering::SeqCst) {
+                return Ok(());
+            }
+            tap_button_with_duration(
+                &controller,
+                Button::A,
+                &format!("Paint Dot {}/{}", r + 1, current_repeats),
+                press_ms,
+                release_ms,
+                wait_ms,
+            )?;
             a_button_presses += 1;
         }
-
 
         // Send paint progress update
         let progress_msg = serde_json::json!({
@@ -889,7 +1012,8 @@ fn perform_painting(
             "dpad_operations": dpad_operations,
             "a_button_presses": a_button_presses,
             "is_paint": true
-        }).to_string();
+        })
+        .to_string();
         let _ = PROGRESS_CHANNEL.send(progress_msg);
 
         // Log progress every 100 dots
@@ -914,8 +1038,10 @@ pub fn perform_speed_calibration(
     skip_initialization: bool,
 ) -> Result<(), HardwareError> {
     let total_ms = press_ms + release_ms + wait_ms;
-    info!("Starting speed calibration test ({}ms/pixel: press={}ms, release={}ms, wait={}ms, skip_init={})...",
-          total_ms, press_ms, release_ms, wait_ms, skip_initialization);
+    info!(
+        "Starting speed calibration test ({}ms/pixel: press={}ms, release={}ms, wait={}ms, skip_init={})...",
+        total_ms, press_ms, release_ms, wait_ms, skip_initialization
+    );
 
     // Initialize controller
     controller.initialize()?;
@@ -924,7 +1050,9 @@ pub fn perform_speed_calibration(
         // ペンサイズを小に設定（5回押下）
         info!("Setting pen size to small...");
         for i in 1..=5 {
-            if stop_signal.load(Ordering::SeqCst) { return Ok(()); }
+            if stop_signal.load(Ordering::SeqCst) {
+                return Ok(());
+            }
             tap_button(&controller, Button::L, &format!("L Tap {}", i))?;
             std::thread::sleep(std::time::Duration::from_millis(400));
         }
@@ -933,8 +1061,14 @@ pub fn perform_speed_calibration(
         // まず左上に移動（左スティック使用）
         info!("Moving to top-left corner...");
         let move_home_cmd = ControllerCommand::new("Move Home")
-            .add_action(ControllerAction::move_left_stick(StickPosition::new(0, 0), 5000))
-            .add_action(ControllerAction::move_left_stick(StickPosition::CENTER, 100));
+            .add_action(ControllerAction::move_left_stick(
+                StickPosition::new(0, 0),
+                5000,
+            ))
+            .add_action(ControllerAction::move_left_stick(
+                StickPosition::CENTER,
+                100,
+            ));
         controller.execute_command(&move_home_cmd)?;
         std::thread::sleep(std::time::Duration::from_millis(500));
 
@@ -948,17 +1082,24 @@ pub fn perform_speed_calibration(
 
         // 右に150ピクセル移動（速めのパラメータで高速化）
         for _ in 0..center_x {
-            if stop_signal.load(Ordering::SeqCst) { return Ok(()); }
+            if stop_signal.load(Ordering::SeqCst) {
+                return Ok(());
+            }
             tap_dpad_with_duration(&controller, DPad::RIGHT, "Move Right", 30, 15, 5)?;
         }
 
         // 下に85ピクセル移動
         for _ in 0..center_y {
-            if stop_signal.load(Ordering::SeqCst) { return Ok(()); }
+            if stop_signal.load(Ordering::SeqCst) {
+                return Ok(());
+            }
             tap_dpad_with_duration(&controller, DPad::DOWN, "Move Down", 30, 15, 5)?;
         }
 
-        info!("Calibration test position reached: ({}, {})", center_x, center_y);
+        info!(
+            "Calibration test position reached: ({}, {})",
+            center_x, center_y
+        );
         std::thread::sleep(std::time::Duration::from_millis(500));
     } else {
         info!("Skipping initialization (pen size, home position, center position)");
@@ -966,7 +1107,14 @@ pub fn perform_speed_calibration(
     }
 
     // 初期化完了後、確実にNEUTRAL状態にリセット
-    tap_dpad_with_duration(&controller, DPad::NEUTRAL, "Reset after initialization", 50, 50, 0)?;
+    tap_dpad_with_duration(
+        &controller,
+        DPad::NEUTRAL,
+        "Reset after initialization",
+        50,
+        50,
+        0,
+    )?;
     std::thread::sleep(std::time::Duration::from_millis(100));
 
     // 5行のテスト（各行異なるパターン、ビーストロフェドン方式）
@@ -982,7 +1130,14 @@ pub fn perform_speed_calibration(
         if stop_signal.load(Ordering::SeqCst) {
             info!("Calibration stopped by user");
             // 停止時も必ずNEUTRAL状態にリセット
-            tap_dpad_with_duration(&controller, DPad::NEUTRAL, "Final Reset on Stop", 100, 100, 0)?;
+            tap_dpad_with_duration(
+                &controller,
+                DPad::NEUTRAL,
+                "Final Reset on Stop",
+                100,
+                100,
+                0,
+            )?;
             std::thread::sleep(std::time::Duration::from_millis(200));
             return Ok(());
         }
@@ -991,11 +1146,25 @@ pub fn perform_speed_calibration(
 
         // ビーストロフェドン方式: 偶数行は左→右、奇数行は右→左
         let is_left_to_right = row_idx % 2 == 0;
-        let direction = if is_left_to_right { DPad::RIGHT } else { DPad::LEFT };
-        let direction_name = if is_left_to_right { "LEFT→RIGHT" } else { "RIGHT←LEFT" };
+        let direction = if is_left_to_right {
+            DPad::RIGHT
+        } else {
+            DPad::LEFT
+        };
+        let direction_name = if is_left_to_right {
+            "LEFT→RIGHT"
+        } else {
+            "RIGHT←LEFT"
+        };
 
-        info!("Testing row {}/{} ({}px draw + {}px gap pattern, {})...",
-              row_idx + 1, rows, pattern_size, pattern_size, direction_name);
+        info!(
+            "Testing row {}/{} ({}px draw + {}px gap pattern, {})...",
+            row_idx + 1,
+            rows,
+            pattern_size,
+            pattern_size,
+            direction_name
+        );
 
         let mut dots_drawn = 0;
         let mut position = 0;
@@ -1004,7 +1173,14 @@ pub fn perform_speed_calibration(
         while position < total_width {
             if stop_signal.load(Ordering::SeqCst) {
                 // 停止時も必ずNEUTRAL状態にリセット
-                tap_dpad_with_duration(&controller, DPad::NEUTRAL, "Final Reset on Stop", 100, 100, 0)?;
+                tap_dpad_with_duration(
+                    &controller,
+                    DPad::NEUTRAL,
+                    "Final Reset on Stop",
+                    100,
+                    100,
+                    0,
+                )?;
                 std::thread::sleep(std::time::Duration::from_millis(200));
                 return Ok(());
             }
@@ -1016,19 +1192,47 @@ pub fn perform_speed_calibration(
                 }
 
                 // D-pad状態を完全にクリア（描画前）
-                tap_dpad_with_duration(&controller, DPad::NEUTRAL, "Clear DPad Before Paint", 10, 10, 0)?;
+                tap_dpad_with_duration(
+                    &controller,
+                    DPad::NEUTRAL,
+                    "Clear DPad Before Paint",
+                    10,
+                    10,
+                    0,
+                )?;
 
                 // ドットを打つ
-                tap_button_with_duration(&controller, Button::A, "Paint Dot", press_ms, release_ms, wait_ms as u64)?;
+                tap_button_with_duration(
+                    &controller,
+                    Button::A,
+                    "Paint Dot",
+                    press_ms,
+                    release_ms,
+                    wait_ms as u64,
+                )?;
                 dots_drawn += 1;
                 position += 1;
 
                 // D-pad状態を完全にクリア（移動前）
-                tap_dpad_with_duration(&controller, DPad::NEUTRAL, "Clear DPad Before Move", 10, 10, 0)?;
+                tap_dpad_with_duration(
+                    &controller,
+                    DPad::NEUTRAL,
+                    "Clear DPad Before Move",
+                    10,
+                    10,
+                    0,
+                )?;
 
                 // 描画方向に移動（行末でない限り）
                 if position < total_width {
-                    tap_dpad_with_duration(&controller, direction, "Move", press_ms, release_ms, wait_ms as u64)?;
+                    tap_dpad_with_duration(
+                        &controller,
+                        direction,
+                        "Move",
+                        press_ms,
+                        release_ms,
+                        wait_ms as u64,
+                    )?;
                 }
             }
 
@@ -1045,29 +1249,63 @@ pub fn perform_speed_calibration(
 
                 // 描画方向に移動（行末でない限り）
                 if position < total_width {
-                    tap_dpad_with_duration(&controller, direction, "Move", press_ms, release_ms, wait_ms as u64)?;
+                    tap_dpad_with_duration(
+                        &controller,
+                        direction,
+                        "Move",
+                        press_ms,
+                        release_ms,
+                        wait_ms as u64,
+                    )?;
                 }
             }
         }
 
-        info!("Row {} complete: {} dots drawn in {}px draw/{}px gap pattern ({})",
-              row_idx + 1, dots_drawn, pattern_size, pattern_size, direction_name);
+        info!(
+            "Row {} complete: {} dots drawn in {}px draw/{}px gap pattern ({})",
+            row_idx + 1,
+            dots_drawn,
+            pattern_size,
+            pattern_size,
+            direction_name
+        );
 
         // 次の行に移動（ビーストロフェドン方式: 下に2ピクセル移動するだけ、左端には戻らない）
         if row_idx < rows - 1 {
             // D-pad状態をクリア（NEUTRAL状態を送信）
-            tap_dpad_with_duration(&controller, DPad::NEUTRAL, "Clear DPad", press_ms, release_ms, wait_ms as u64)?;
+            tap_dpad_with_duration(
+                &controller,
+                DPad::NEUTRAL,
+                "Clear DPad",
+                press_ms,
+                release_ms,
+                wait_ms as u64,
+            )?;
             std::thread::sleep(std::time::Duration::from_millis(100));
 
             // 下に2ピクセル移動（行間を空ける）
             // ユーザー指定のパラメータを使用
             info!("Moving down 2 pixels for next row (boustrophedon pattern)");
             for _ in 0..2 {
-                tap_dpad_with_duration(&controller, DPad::DOWN, "Move Down", press_ms, release_ms, wait_ms as u64)?;
+                tap_dpad_with_duration(
+                    &controller,
+                    DPad::DOWN,
+                    "Move Down",
+                    press_ms,
+                    release_ms,
+                    wait_ms as u64,
+                )?;
             }
 
             // D-pad状態をクリア（次の行の開始前）
-            tap_dpad_with_duration(&controller, DPad::NEUTRAL, "Clear DPad", press_ms, release_ms, wait_ms as u64)?;
+            tap_dpad_with_duration(
+                &controller,
+                DPad::NEUTRAL,
+                "Clear DPad",
+                press_ms,
+                release_ms,
+                wait_ms as u64,
+            )?;
             std::thread::sleep(std::time::Duration::from_millis(200));
         }
     }
@@ -1095,7 +1333,14 @@ fn test_paint_move(
     for i in 0..10 {
         if stop_signal.load(Ordering::SeqCst) {
             // 停止時も必ずNEUTRAL状態にリセット
-            tap_dpad_with_duration(&controller, DPad::NEUTRAL, "Final Reset on Stop", 100, 100, 0)?;
+            tap_dpad_with_duration(
+                &controller,
+                DPad::NEUTRAL,
+                "Final Reset on Stop",
+                100,
+                100,
+                0,
+            )?;
             std::thread::sleep(std::time::Duration::from_millis(200));
             return Ok(());
         }
@@ -1106,13 +1351,27 @@ fn test_paint_move(
         tap_dpad_with_duration(&controller, DPad::NEUTRAL, "Clear DPad", 10, 10, 0)?;
 
         // ドットを打つ
-        tap_button_with_duration(&controller, Button::A, "Paint Dot", press_ms, release_ms, wait_ms as u64)?;
+        tap_button_with_duration(
+            &controller,
+            Button::A,
+            "Paint Dot",
+            press_ms,
+            release_ms,
+            wait_ms as u64,
+        )?;
 
         // D-pad状態をクリア
         tap_dpad_with_duration(&controller, DPad::NEUTRAL, "Clear DPad", 10, 10, 0)?;
 
         // 右に移動
-        tap_dpad_with_duration(&controller, DPad::RIGHT, "Move Right", press_ms, release_ms, wait_ms as u64)?;
+        tap_dpad_with_duration(
+            &controller,
+            DPad::RIGHT,
+            "Move Right",
+            press_ms,
+            release_ms,
+            wait_ms as u64,
+        )?;
     }
 
     // テスト完了後、確実にNEUTRAL状態にリセット
@@ -1137,7 +1396,14 @@ fn test_gap_move(
     for i in 0..10 {
         if stop_signal.load(Ordering::SeqCst) {
             // 停止時も必ずNEUTRAL状態にリセット
-            tap_dpad_with_duration(&controller, DPad::NEUTRAL, "Final Reset on Stop", 100, 100, 0)?;
+            tap_dpad_with_duration(
+                &controller,
+                DPad::NEUTRAL,
+                "Final Reset on Stop",
+                100,
+                100,
+                0,
+            )?;
             std::thread::sleep(std::time::Duration::from_millis(200));
             return Ok(());
         }
@@ -1148,7 +1414,14 @@ fn test_gap_move(
         tap_dpad_with_duration(&controller, DPad::NEUTRAL, "Clear DPad", 10, 10, 0)?;
 
         // 右に移動（Aボタンなし）
-        tap_dpad_with_duration(&controller, DPad::RIGHT, "Move Right", press_ms, release_ms, wait_ms as u64)?;
+        tap_dpad_with_duration(
+            &controller,
+            DPad::RIGHT,
+            "Move Right",
+            press_ms,
+            release_ms,
+            wait_ms as u64,
+        )?;
     }
 
     // テスト完了後、確実にNEUTRAL状態にリセット
@@ -1164,8 +1437,10 @@ pub async fn start_calibration(
     State(state): State<Arc<ArtworkState>>,
     Json(request): Json<super::models::CalibrationRequest>,
 ) -> Result<Json<ApiResponse>, StatusCode> {
-    info!("Starting speed calibration test with params: press={}ms, release={}ms, wait={}ms, skip_init={}",
-          request.press_ms, request.release_ms, request.wait_ms, request.skip_initialization);
+    info!(
+        "Starting speed calibration test with params: press={}ms, release={}ms, wait={}ms, skip_init={}",
+        request.press_ms, request.release_ms, request.wait_ms, request.skip_initialization
+    );
 
     let controller = state.controller.clone();
     let press_ms = request.press_ms;
@@ -1188,8 +1463,16 @@ pub async fn start_calibration(
     // Spawn calibration task
     tokio::spawn(async move {
         let result = tokio::task::spawn_blocking(move || {
-            perform_speed_calibration(controller, stop_signal, press_ms, release_ms, wait_ms, skip_initialization)
-        }).await;
+            perform_speed_calibration(
+                controller,
+                stop_signal,
+                press_ms,
+                release_ms,
+                wait_ms,
+                skip_initialization,
+            )
+        })
+        .await;
 
         // Clear active painting when done
         {
@@ -1199,8 +1482,8 @@ pub async fn start_calibration(
 
         // Send completion status through PROGRESS_CHANNEL for frontend notification
         use crate::interfaces::web::log_streamer::PROGRESS_CHANNEL;
-        use serde_json::json;
         use chrono::Utc;
+        use serde_json::json;
 
         match result {
             Ok(Ok(_)) => {
@@ -1211,9 +1494,10 @@ pub async fn start_calibration(
                     "timestamp": Utc::now().to_rfc3339(),
                     "status": "success",
                     "message": "キャリブレーションテストが完了しました"
-                }).to_string();
+                })
+                .to_string();
                 let _ = PROGRESS_CHANNEL.send(completion_msg);
-            },
+            }
             Ok(Err(e)) => {
                 error!("Calibration failed with hardware error: {}", e);
                 // Send calibration failure event
@@ -1222,9 +1506,10 @@ pub async fn start_calibration(
                     "timestamp": Utc::now().to_rfc3339(),
                     "status": "error",
                     "message": format!("キャリブレーションテストが失敗しました: {}", e)
-                }).to_string();
+                })
+                .to_string();
                 let _ = PROGRESS_CHANNEL.send(failure_msg);
-            },
+            }
             Err(e) => {
                 error!("Calibration task panicked or was cancelled: {}", e);
                 // Send calibration cancellation event
@@ -1233,7 +1518,8 @@ pub async fn start_calibration(
                     "timestamp": Utc::now().to_rfc3339(),
                     "status": "cancelled",
                     "message": "キャリブレーションテストが中断されました"
-                }).to_string();
+                })
+                .to_string();
                 let _ = PROGRESS_CHANNEL.send(cancel_msg);
             }
         }
@@ -1270,7 +1556,8 @@ pub async fn start_paint_move_test(
     tokio::spawn(async move {
         let result = tokio::task::spawn_blocking(move || {
             test_paint_move(controller, stop_signal, press_ms, release_ms, wait_ms)
-        }).await;
+        })
+        .await;
 
         {
             let mut active = active_painting_store.write().await;
@@ -1278,8 +1565,8 @@ pub async fn start_paint_move_test(
         }
 
         use crate::interfaces::web::log_streamer::PROGRESS_CHANNEL;
-        use serde_json::json;
         use chrono::Utc;
+        use serde_json::json;
 
         match result {
             Ok(Ok(_)) => {
@@ -1288,16 +1575,18 @@ pub async fn start_paint_move_test(
                     "timestamp": Utc::now().to_rfc3339(),
                     "status": "success",
                     "message": "描画移動テストが完了しました"
-                }).to_string();
+                })
+                .to_string();
                 let _ = PROGRESS_CHANNEL.send(completion_msg);
-            },
+            }
             _ => {
                 let error_msg = json!({
                     "type": "calibration_complete",
                     "timestamp": Utc::now().to_rfc3339(),
                     "status": "error",
                     "message": "描画移動テストが失敗しました"
-                }).to_string();
+                })
+                .to_string();
                 let _ = PROGRESS_CHANNEL.send(error_msg);
             }
         }
@@ -1334,7 +1623,8 @@ pub async fn start_gap_move_test(
     tokio::spawn(async move {
         let result = tokio::task::spawn_blocking(move || {
             test_gap_move(controller, stop_signal, press_ms, release_ms, wait_ms)
-        }).await;
+        })
+        .await;
 
         {
             let mut active = active_painting_store.write().await;
@@ -1342,8 +1632,8 @@ pub async fn start_gap_move_test(
         }
 
         use crate::interfaces::web::log_streamer::PROGRESS_CHANNEL;
-        use serde_json::json;
         use chrono::Utc;
+        use serde_json::json;
 
         match result {
             Ok(Ok(_)) => {
@@ -1352,16 +1642,18 @@ pub async fn start_gap_move_test(
                     "timestamp": Utc::now().to_rfc3339(),
                     "status": "success",
                     "message": "空白移動テストが完了しました"
-                }).to_string();
+                })
+                .to_string();
                 let _ = PROGRESS_CHANNEL.send(completion_msg);
-            },
+            }
             _ => {
                 let error_msg = json!({
                     "type": "calibration_complete",
                     "timestamp": Utc::now().to_rfc3339(),
                     "status": "error",
                     "message": "空白移動テストが失敗しました"
-                }).to_string();
+                })
+                .to_string();
                 let _ = PROGRESS_CHANNEL.send(error_msg);
             }
         }

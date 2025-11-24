@@ -1,9 +1,9 @@
 use super::{
     ArtworkState, create_artwork, delete_artwork, embedded_assets::WebAssets, get_artwork,
-    get_hardware_status, get_system_info, list_artworks, paint_artwork, upload_artwork,
-    websocket_handler, stop_painting, pause_painting, start_calibration,
-    start_paint_move_test, start_gap_move_test, get_artwork_path, get_artwork_strategies,
-    update_painting_repeats, update_painting_timing,
+    get_artwork_path, get_artwork_strategies, get_hardware_status, get_system_info, list_artworks,
+    paint_artwork, pause_painting, start_calibration, start_gap_move_test, start_paint_move_test,
+    stop_painting, update_painting_repeats, update_painting_timing, upload_artwork,
+    websocket_handler,
 };
 use axum::{
     Router,
@@ -27,19 +27,19 @@ pub async fn create_server(host: String, port: u16) -> anyhow::Result<()> {
     let addr: SocketAddr = format!("{host}:{port}").parse()?;
 
     // Create shared application state
+    use crate::domain::controller::ControllerEmulator;
     use crate::infrastructure::hardware::linux_hid_controller::LinuxHidController;
     use crate::infrastructure::hardware::mock_controller::MockController;
-    use crate::domain::controller::ControllerEmulator;
 
     let mut controller: Arc<dyn ControllerEmulator> = Arc::new(LinuxHidController::new());
-    
+
     // Initialize controller
     if let Err(e) = controller.initialize() {
         tracing::warn!("Failed to initialize Linux HID controller: {}", e);
         tracing::warn!("Falling back to Mock Controller for testing/simulation.");
         controller = Arc::new(MockController::new());
         if let Err(e) = controller.initialize() {
-             tracing::error!("Failed to initialize Mock Controller: {}", e);
+            tracing::error!("Failed to initialize Mock Controller: {}", e);
         }
     }
     let app_state = Arc::new(ArtworkState::new(controller));
@@ -65,7 +65,10 @@ pub async fn create_server(host: String, port: u16) -> anyhow::Result<()> {
         .route("/api/painting/stop", post(stop_painting))
         .route("/api/painting/pause", post(pause_painting))
         .route("/api/calibration/start", post(start_calibration))
-        .route("/api/calibration/test/paint-move", post(start_paint_move_test))
+        .route(
+            "/api/calibration/test/paint-move",
+            post(start_paint_move_test),
+        )
         .route("/api/calibration/test/gap-move", post(start_gap_move_test))
         // WebSocket endpoint
         .route("/ws/logs", get(websocket_handler))

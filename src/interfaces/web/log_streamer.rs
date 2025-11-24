@@ -10,7 +10,7 @@ lazy_static::lazy_static! {
         let (tx, _) = broadcast::channel(100);
         tx
     };
-    
+
     pub static ref PROGRESS_CHANNEL: broadcast::Sender<String> = {
         let (tx, _) = broadcast::channel(100);
         tx
@@ -34,7 +34,7 @@ where
 
         let level = event.metadata().level().as_str();
         let target = event.metadata().target();
-        
+
         // Format message
         let log_entry = json!({
             "type": "log",
@@ -68,7 +68,7 @@ impl tracing::field::Visit for JsonVisitor {
             self.message = format!("{:?}", value);
         }
     }
-    
+
     fn record_str(&mut self, field: &tracing::field::Field, value: &str) {
         if field.name() == "message" {
             self.message = value.to_string();
@@ -91,9 +91,14 @@ pub async fn stream_logs(mut socket: WebSocket) {
         "level": "INFO",
         "message": "Log streaming connected",
         "target": "log_streamer"
-    }).to_string();
+    })
+    .to_string();
 
-    if socket.send(Message::Text(connect_msg.into())).await.is_err() {
+    if socket
+        .send(Message::Text(connect_msg.into()))
+        .await
+        .is_err()
+    {
         return;
     }
 
@@ -115,7 +120,7 @@ pub async fn stream_logs(mut socket: WebSocket) {
                     }
                 }
             }
-            
+
             // Receive progress from channel
             result = progress_rx.recv() => {
                 match result {
