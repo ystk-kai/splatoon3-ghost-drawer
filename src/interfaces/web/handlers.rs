@@ -1,9 +1,13 @@
 use super::artwork_handlers::ArtworkState;
 use super::log_streamer::stream_logs;
 use super::models::{HardwareDetails, HardwareStatus, SystemInfo};
-use axum::{Json, extract::{State, ws::WebSocketUpgrade}, response::Response};
-use std::sync::Arc;
+use axum::{
+    Json,
+    extract::{State, ws::WebSocketUpgrade},
+    response::Response,
+};
 use std::path::Path;
+use std::sync::Arc;
 
 /// Get system information
 pub async fn get_system_info() -> Json<SystemInfo> {
@@ -17,13 +21,11 @@ pub async fn get_system_info() -> Json<SystemInfo> {
 }
 
 /// Get hardware status
-pub async fn get_hardware_status(
-    State(state): State<Arc<ArtworkState>>,
-) -> Json<HardwareStatus> {
+pub async fn get_hardware_status(State(state): State<Arc<ArtworkState>>) -> Json<HardwareStatus> {
     // Use the controller abstraction to check connection status
     // This allows MockController to report "connected" even if physical hardware is missing
     let nintendo_switch_connected = state.controller.is_connected().unwrap_or(false);
-    
+
     let usb_otg_available = check_usb_otg_availability();
     let hid_device_available = check_hid_device_availability();
 
@@ -45,12 +47,11 @@ pub async fn websocket_handler(ws: WebSocketUpgrade) -> Response {
 
 fn get_system_uptime() -> u64 {
     // Try to read system uptime from /proc/uptime
-    if let Ok(contents) = std::fs::read_to_string("/proc/uptime") {
-        if let Some(uptime_str) = contents.split_whitespace().next() {
-            if let Ok(uptime) = uptime_str.parse::<f64>() {
-                return uptime as u64;
-            }
-        }
+    if let Ok(contents) = std::fs::read_to_string("/proc/uptime")
+        && let Some(uptime_str) = contents.split_whitespace().next()
+        && let Ok(uptime) = uptime_str.parse::<f64>()
+    {
+        return uptime as u64;
     }
     0
 }
@@ -121,7 +122,8 @@ fn get_hardware_details() -> HardwareDetails {
     }
 
     // Check USB gadget configuration
-    details.usb_gadget_configured = Path::new("/sys/kernel/config/usb_gadget/nintendo_controller").exists();
+    details.usb_gadget_configured =
+        Path::new("/sys/kernel/config/usb_gadget/nintendo_controller").exists();
 
     // Check HID device
     if Path::new("/dev/hidg0").exists() {
@@ -131,10 +133,10 @@ fn get_hardware_details() -> HardwareDetails {
     // Check loaded kernel modules
     if let Ok(modules) = std::fs::read_to_string("/proc/modules") {
         for line in modules.lines() {
-            if let Some(module_name) = line.split_whitespace().next() {
-                if module_name.contains("libcomposite") || module_name.contains("dwc2") {
-                    details.kernel_modules_loaded.push(module_name.to_string());
-                }
+            if let Some(module_name) = line.split_whitespace().next()
+                && (module_name.contains("libcomposite") || module_name.contains("dwc2"))
+            {
+                details.kernel_modules_loaded.push(module_name.to_string());
             }
         }
     }

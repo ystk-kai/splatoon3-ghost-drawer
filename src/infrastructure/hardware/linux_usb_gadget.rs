@@ -285,10 +285,10 @@ impl UsbGadgetRepository for LinuxUsbGadgetManager {
         let gadget_path = format!("{}/{}", self.configfs_path, gadget_id);
 
         // First deactivate if active
-        if let Ok(mut gadget) = self.get_gadget_state(gadget_id).await {
-            if gadget.is_active() {
-                self.deactivate_gadget(&mut gadget).await?;
-            }
+        if let Ok(mut gadget) = self.get_gadget_state(gadget_id).await
+            && gadget.is_active()
+        {
+            self.deactivate_gadget(&mut gadget).await?;
         }
 
         // Remove symlinks

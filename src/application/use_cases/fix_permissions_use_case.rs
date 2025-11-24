@@ -43,23 +43,18 @@ impl FixPermissionsUseCase {
                 info!("Found HID device: {}", hid_path);
 
                 // Change ownership to the original user if run with sudo
-                if let Ok(uid) = std::env::var("SUDO_UID") {
-                    if let Ok(gid) = std::env::var("SUDO_GID") {
-                        info!("Setting permissions for {} to {}:{}", hid_path, uid, gid);
-
-                        let output = Command::new("chown")
-                            .arg(format!("{uid}:{gid}"))
-                            .arg(&hid_path)
-                            .output()
-                            .map_err(|e| {
-                                SetupError::Unknown(format!("Failed to change ownership: {e}"))
-                            })?;
-
-                        if !output.status.success() {
-                            let stderr = String::from_utf8_lossy(&output.stderr);
-                            warn!("Failed to change ownership of {}: {}", hid_path, stderr);
+                if let Ok(uid) = std::env::var("SUDO_UID")
+                    && let Ok(gid) = std::env::var("SUDO_GID")
+                {
+                    info!("Setting permissions for {} to {}:{}", hid_path, uid, gid);
+                    if let Ok(uid_int) = uid.parse::<u32>()
+                        && let Ok(gid_int) = gid.parse::<u32>()
+                    {
+                        use std::os::unix::fs::chown;
+                        if let Err(e) = chown(&hid_path, Some(uid_int), Some(gid_int)) {
+                            warn!("Failed to chown {}: {}", hid_path, e);
                         } else {
-                            info!("Changed ownership of {} to {}:{}", hid_path, uid, gid);
+                            info!("Successfully changed ownership of {}", hid_path);
                         }
                     }
                 }

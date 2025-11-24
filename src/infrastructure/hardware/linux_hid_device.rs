@@ -164,10 +164,10 @@ impl HidDeviceRepository for LinuxHidDeviceRepository {
             .await
             .map_err(|e| ControllerError::IoError(format!("Failed to read entry: {e}")))?
         {
-            if let Ok(name) = entry.file_name().into_string() {
-                if name.starts_with("hidg") {
-                    devices.push(format!("/dev/{name}"));
-                }
+            if let Ok(name) = entry.file_name().into_string()
+                && name.starts_with("hidg")
+            {
+                devices.push(format!("/dev/{name}"));
             }
         }
 

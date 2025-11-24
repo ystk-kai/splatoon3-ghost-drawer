@@ -700,7 +700,7 @@ impl ConversionParameters {
     pub fn with_adaptive_threshold(mut self, enable: bool, block_size: u16, constant: i8) -> Self {
         self.adjustments.adaptive_threshold = enable;
         if enable {
-            self.adjustments.adaptive_block_size = if block_size % 2 == 0 {
+            self.adjustments.adaptive_block_size = if block_size.is_multiple_of(2) {
                 block_size + 1
             } else {
                 block_size
@@ -712,20 +712,20 @@ impl ConversionParameters {
 
     /// パラメータの検証
     pub fn validate(&self) -> Result<(), ConversionError> {
-        if let Some(quality) = self.quality {
-            if quality == 0 || quality > 100 {
-                return Err(ConversionError::InvalidQuality);
-            }
+        if let Some(quality) = self.quality
+            && (quality == 0 || quality > 100)
+        {
+            return Err(ConversionError::InvalidQuality);
         }
 
         if self.target_resolution.total_pixels() == 0 {
             return Err(ConversionError::InvalidResolution);
         }
 
-        if let Some(ColorReduction::Palette(colors)) = self.color_reduction {
-            if colors < 2 {
-                return Err(ConversionError::InvalidColorCount);
-            }
+        if let Some(ColorReduction::Palette(colors)) = self.color_reduction
+            && colors < 2
+        {
+            return Err(ConversionError::InvalidColorCount);
         }
 
         // 画像調整パラメータの検証

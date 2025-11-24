@@ -417,13 +417,13 @@ impl<D: BoardDetector, G: UsbGadgetManager> ShowSystemInfoUseCase<D, G> {
         ];
 
         for path in paths_to_check {
-            if Path::new(path).exists() {
-                if let Ok(metadata) = fs::metadata(path) {
-                    use std::os::unix::fs::PermissionsExt;
-                    let mode = metadata.permissions().mode();
-                    let perms = format!("{:o}", mode & 0o777);
-                    println!("      {path} ({perms})");
-                }
+            if Path::new(path).exists()
+                && let Ok(metadata) = fs::metadata(path)
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let mode = metadata.permissions().mode();
+                let perms = format!("{:o}", mode & 0o777);
+                println!("      {path} ({perms})");
             }
         }
 

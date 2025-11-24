@@ -65,7 +65,7 @@ impl DiagnoseConnectionUseCase {
 
     fn check_g_ether_conflict(&self) -> Result<(), HardwareError> {
         println!("🚫 Checking for conflicts:");
-        
+
         let output = Command::new("lsmod")
             .output()
             .map_err(|e| HardwareError::Unknown(format!("Failed to run lsmod: {e}")))?;
@@ -79,7 +79,7 @@ impl DiagnoseConnectionUseCase {
         } else {
             println!("   ✅ No g_ether conflict detected");
         }
-        
+
         println!();
         Ok(())
     }
@@ -357,24 +357,24 @@ impl DiagnoseConnectionUseCase {
         }
 
         // Check /etc/modules
-        if Path::new("/etc/modules").exists() {
-            if let Ok(content) = fs::read_to_string("/etc/modules") {
-                let has_dwc2 = content.lines().any(|line| line.trim() == "dwc2");
-                let has_libcomposite = content.lines().any(|line| line.trim() == "libcomposite");
+        if Path::new("/etc/modules").exists()
+            && let Ok(content) = fs::read_to_string("/etc/modules")
+        {
+            let has_dwc2 = content.lines().any(|line| line.trim() == "dwc2");
+            let has_libcomposite = content.lines().any(|line| line.trim() == "libcomposite");
 
-                println!(
-                    "   /etc/modules dwc2: {}",
-                    if has_dwc2 { "✅ Found" } else { "❌ Missing" }
-                );
-                println!(
-                    "   /etc/modules libcomposite: {}",
-                    if has_libcomposite {
-                        "✅ Found"
-                    } else {
-                        "❌ Missing"
-                    }
-                );
-            }
+            println!(
+                "   /etc/modules dwc2: {}",
+                if has_dwc2 { "✅ Found" } else { "❌ Missing" }
+            );
+            println!(
+                "   /etc/modules libcomposite: {}",
+                if has_libcomposite {
+                    "✅ Found"
+                } else {
+                    "❌ Missing"
+                }
+            );
         }
 
         // Check blacklist
@@ -447,26 +447,23 @@ impl DiagnoseConnectionUseCase {
                     _ => "❓",
                 };
 
-                println!(
-                    "   {service_name} ({description}): {status_icon} {status}"
-                );
+                println!("   {service_name} ({description}): {status_icon} {status}");
 
                 // If failed, show recent logs
-                if status == "failed" {
-                    if let Ok(log_output) = Command::new("journalctl")
+                if status == "failed"
+                    && let Ok(log_output) = Command::new("journalctl")
                         .arg("-u")
                         .arg(service_name)
                         .arg("--no-pager")
                         .arg("-n")
                         .arg("3")
                         .output()
-                    {
-                        let logs = String::from_utf8_lossy(&log_output.stdout);
-                        if !logs.trim().is_empty() {
-                            println!("     Recent logs:");
-                            for line in logs.lines().take(3) {
-                                println!("       {line}");
-                            }
+                {
+                    let logs = String::from_utf8_lossy(&log_output.stdout);
+                    if !logs.trim().is_empty() {
+                        println!("     Recent logs:");
+                        for line in logs.lines().take(3) {
+                            println!("       {line}");
                         }
                     }
                 }

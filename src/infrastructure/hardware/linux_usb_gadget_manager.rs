@@ -76,11 +76,11 @@ impl LinuxUsbGadgetManager {
                 info!("Loading module: {}", module);
                 let output = Command::new("modprobe").arg(module).output();
 
-                if let Ok(output) = output {
-                    if !output.status.success() {
-                        let stderr = String::from_utf8_lossy(&output.stderr);
-                        warn!("Failed to load module {}: {}", module, stderr);
-                    }
+                if let Ok(output) = output
+                    && !output.status.success()
+                {
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    warn!("Failed to load module {}: {}", module, stderr);
                 }
             }
 
@@ -146,15 +146,15 @@ impl LinuxUsbGadgetManager {
                 // Change ownership to splatoon3 user/group
                 // Since this runs as root (systemd service), we can't rely on SUDO_UID
                 // We'll try to find the splatoon3 user/group ID
-                
+
                 let uid_output = Command::new("id").args(["-u", "splatoon3"]).output();
                 let gid_output = Command::new("id").args(["-g", "splatoon3"]).output();
-                
+
                 if let (Ok(uid_out), Ok(gid_out)) = (uid_output, gid_output) {
                     if uid_out.status.success() && gid_out.status.success() {
                         let uid = String::from_utf8_lossy(&uid_out.stdout).trim().to_string();
                         let gid = String::from_utf8_lossy(&gid_out.stdout).trim().to_string();
-                        
+
                         info!("Setting permissions for {} to {}:{}", hid_path, uid, gid);
 
                         let output = Command::new("chown")
@@ -306,8 +306,7 @@ impl UsbGadgetManager for LinuxUsbGadgetManager {
         // Write HID report descriptor for Nintendo Pro Controller
         // This is the actual descriptor used by the Pro Controller
 
-
-    // ... (inside configure_as_pro_controller)
+        // ... (inside configure_as_pro_controller)
 
         // Set USB version
         self.write_file(&format!("{GADGET_PATH}/bcdUSB"), "0x0200")?; // USB 2.0
@@ -329,7 +328,8 @@ impl UsbGadgetManager for LinuxUsbGadgetManager {
             0x05, 0x09, //   Usage Page (Button)
             0x19, 0x01, //   Usage Minimum (0x01)
             0x29, 0x10, //   Usage Maximum (0x10)
-            0x81, 0x02, //   Input (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)
+            0x81,
+            0x02, //   Input (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)
             0x05, 0x01, //   Usage Page (Generic Desktop Ctrls)
             0x25, 0x07, //   Logical Maximum (7)
             0x46, 0x3B, 0x01, //   Physical Maximum (315)
@@ -340,7 +340,8 @@ impl UsbGadgetManager for LinuxUsbGadgetManager {
             0x81, 0x42, //   Input (Data,Var,Abs,No Wrap,Linear,Preferred State,Null State)
             0x65, 0x00, //   Unit (None)
             0x95, 0x01, //   Report Count (1)
-            0x81, 0x01, //   Input (Const,Array,Abs,No Wrap,Linear,Preferred State,No Null Position)
+            0x81,
+            0x01, //   Input (Const,Array,Abs,No Wrap,Linear,Preferred State,No Null Position)
             0x26, 0xFF, 0x00, //   Logical Maximum (255)
             0x46, 0xFF, 0x00, //   Physical Maximum (255)
             0x09, 0x30, //   Usage (X)
@@ -349,14 +350,17 @@ impl UsbGadgetManager for LinuxUsbGadgetManager {
             0x09, 0x35, //   Usage (Rz)
             0x75, 0x08, //   Report Size (8)
             0x95, 0x04, //   Report Count (4)
-            0x81, 0x02, //   Input (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)
+            0x81,
+            0x02, //   Input (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)
             0x06, 0x00, 0xFF, //   Usage Page (Vendor Defined 0xFF00)
             0x09, 0x20, //   Usage (0x20)
             0x95, 0x01, //   Report Count (1)
-            0x81, 0x02, //   Input (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)
+            0x81,
+            0x02, //   Input (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)
             0x0A, 0x21, 0x26, //   Usage (0x2621)
             0x95, 0x08, //   Report Count (8)
-            0x91, 0x02, //   Output (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position,Non-volatile)
+            0x91,
+            0x02, //   Output (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position,Non-volatile)
             0xC0, // End Collection
         ];
 
@@ -411,7 +415,7 @@ impl UsbGadgetManager for LinuxUsbGadgetManager {
 
         if needs_recreation {
             warn!("/dev/hidg0 missing or not a character device. Attempting manual creation...");
-            
+
             // Clean up if it exists (as directory or file)
             if hidg0_path.exists() {
                 if hidg0_path.is_dir() {
@@ -424,12 +428,12 @@ impl UsbGadgetManager for LinuxUsbGadgetManager {
                     let _ = fs::remove_file("/dev/hidg0");
                 }
             }
-            
+
             // Create device node manually: mknod /dev/hidg0 c 236 0
             // Note: Major number 236 is typical for HID gadget, but dynamic.
             // Ideally we should read it from /sys/kernel/config/usb_gadget/nintendo_controller/functions/hid.usb0/dev
             // Format is "Major:Minor" e.g. "236:0"
-            
+
             let dev_path = format!("{hid_dir}/dev");
             let (major, minor) = if let Ok(dev_content) = fs::read_to_string(&dev_path) {
                 let parts: Vec<&str> = dev_content.trim().split(':').collect();
@@ -444,13 +448,16 @@ impl UsbGadgetManager for LinuxUsbGadgetManager {
                 ("236".to_string(), "0".to_string())
             };
 
-            info!("Creating /dev/hidg0 with major {} and minor {}", major, minor);
-            
+            info!(
+                "Creating /dev/hidg0 with major {} and minor {}",
+                major, minor
+            );
+
             let output = Command::new("mknod")
                 .args(["/dev/hidg0", "c", &major, &minor])
                 .output()
                 .map_err(|e| SetupError::Unknown(format!("Failed to run mknod: {e}")))?;
-                
+
             if !output.status.success() {
                 let stderr = String::from_utf8_lossy(&output.stderr);
                 error!("Failed to create /dev/hidg0: {}", stderr);

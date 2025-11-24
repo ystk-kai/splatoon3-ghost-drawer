@@ -168,28 +168,28 @@ impl ArtworkQuery {
 
     /// クエリの検証
     pub fn validate(&self) -> Result<(), RepositoryError> {
-        if let Some(limit) = self.limit {
-            if limit == 0 || limit > 1000 {
-                return Err(RepositoryError::InvalidQuery {
-                    message: "Limit must be between 1 and 1000".to_string(),
-                });
-            }
+        if let Some(limit) = self.limit
+            && (limit == 0 || limit > 1000)
+        {
+            return Err(RepositoryError::InvalidQuery {
+                message: "Limit must be between 1 and 1000".to_string(),
+            });
         }
 
-        if let (Some(after), Some(before)) = (&self.created_after, &self.created_before) {
-            if after.epoch_millis >= before.epoch_millis {
-                return Err(RepositoryError::InvalidQuery {
-                    message: "created_after must be before created_before".to_string(),
-                });
-            }
+        if let (Some(after), Some(before)) = (&self.created_after, &self.created_before)
+            && after.epoch_millis >= before.epoch_millis
+        {
+            return Err(RepositoryError::InvalidQuery {
+                message: "created_after must be before created_before".to_string(),
+            });
         }
 
-        if let (Some(min), Some(max)) = (self.min_completion, self.max_completion) {
-            if min < 0.0 || max > 1.0 || min > max {
-                return Err(RepositoryError::InvalidQuery {
-                    message: "Invalid completion range".to_string(),
-                });
-            }
+        if let (Some(min), Some(max)) = (self.min_completion, self.max_completion)
+            && (min < 0.0 || max > 1.0 || min > max)
+        {
+            return Err(RepositoryError::InvalidQuery {
+                message: "Invalid completion range".to_string(),
+            });
         }
 
         Ok(())

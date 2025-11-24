@@ -38,11 +38,11 @@ impl LinuxSystemdManager {
         // Check if user already exists
         let check_output = Command::new("id").arg("splatoon3").output();
 
-        if let Ok(output) = check_output {
-            if output.status.success() {
-                info!("User 'splatoon3' already exists");
-                return Ok(());
-            }
+        if let Ok(output) = check_output
+            && output.status.success()
+        {
+            info!("User 'splatoon3' already exists");
+            return Ok(());
         }
 
         // Create system user
