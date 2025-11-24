@@ -29,7 +29,7 @@ Raspberry Pi Zero 2WをUSB経由でNintendo Switchに接続し、Web UIから画
 ![画像変換画面](assets/splatoon3_ghost_drawer_01.png)
 
 ### 2. 描画準備
-変換された画像を確認し、描画設定（速度など）を調整します。「Paint」ボタンを押すと描画が開始されます。
+変換された画像を確認し、描画設定（速度など）を調整します。「開始」ボタンを押すと描画が開始されます。
 
 ![描画準備画面](assets/splatoon3_ghost_drawer_02.png)
 
