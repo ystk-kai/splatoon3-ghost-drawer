@@ -48,7 +48,7 @@ fn main() {
         println!("Releasing...");
         send_report(device_path, 0, 0x08);
         thread::sleep(Duration::from_millis(100));
-        
+
         // Press A (Bit 2 -> 0x04) just in case L is not visible
         println!("Pressing A...");
         send_report(device_path, 0x04, 0x08);
@@ -63,20 +63,20 @@ fn main() {
 
 fn send_report(path: &str, buttons: u16, hat: u8) {
     let mut report = [0u8; 8];
-    
+
     // Buttons (Little Endian)
     report[0] = (buttons & 0xFF) as u8;
     report[1] = ((buttons >> 8) & 0xFF) as u8;
-    
+
     // HAT
     report[2] = hat;
-    
+
     // Sticks (Center)
     report[3] = 128;
     report[4] = 128;
     report[5] = 128;
     report[6] = 128;
-    
+
     // Vendor
     report[7] = 0;
 

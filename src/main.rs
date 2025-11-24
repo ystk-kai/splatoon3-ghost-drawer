@@ -24,10 +24,10 @@ async fn main() -> anyhow::Result<()> {
         log_directory: "/tmp/splatoon3-ghost-drawer-logs".to_string(),
         ..DebugConfig::default()
     };
-    
+
     // Initialize tracing subscriber with both stdout and our custom capture layer
-    use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
     use splatoon3_ghost_drawer::interfaces::web::log_streamer::LogCaptureLayer;
+    use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
 
     let env_filter = EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| EnvFilter::new("info,tokio_tungstenite=warn,tungstenite=warn"));

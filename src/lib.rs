@@ -129,13 +129,13 @@ pub mod infrastructure {
 pub mod interfaces {
     pub mod web {
         mod artwork_handlers;
+        pub mod dto;
         pub mod embedded_assets;
         mod error_response;
         mod handlers;
         pub mod log_streamer;
         mod models;
         pub mod server;
-        pub mod dto;
 
         // Internal re-exports
         pub(crate) use artwork_handlers::*;

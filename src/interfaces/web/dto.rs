@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
 use crate::domain::painting::value_objects::DrawingStrategy;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct StrategyStats {
