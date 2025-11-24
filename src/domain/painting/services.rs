@@ -182,7 +182,7 @@ impl ArtworkToCommandConverter {
 
         // グリッドの初期化
         let mut grid: Vec<Vec<Vec<Coordinates>>> = vec![vec![Vec::new(); GRID_COLS]; GRID_ROWS];
-        
+
         // 全点をグリッドに配置
         for (coord, _) in drawable_dots {
             let col = (coord.x as usize) / (GRID_SIZE as usize);
@@ -196,23 +196,25 @@ impl ArtworkToCommandConverter {
         // グリッドの左上から順に探して最初に見つかった点を使用
         let mut current = Coordinates::new(0, 0);
         let mut found_start = false;
-        
-        'start_search: for row in 0..GRID_ROWS {
-            for col in 0..GRID_COLS {
-                if !grid[row][col].is_empty() {
+
+        'start_search: for row in grid.iter_mut().take(GRID_ROWS) {
+            for bucket in row.iter_mut().take(GRID_COLS) {
+                if !bucket.is_empty() {
                     // バケット内で最も左上の点を探す
                     let mut min_idx = 0;
-                    let mut min_val = i32::MAX;
-                    
-                    for (i, p) in grid[row][col].iter().enumerate() {
-                        let val = p.x as i32 + p.y as i32;
-                        if val < min_val {
-                            min_val = val;
+                    let mut min_x = u16::MAX;
+                    let mut min_y = u16::MAX;
+
+                    for (i, p) in bucket.iter().enumerate() {
+                        if p.x < min_x || (p.x == min_x && p.y < min_y) {
+                            min_x = p.x;
+                            min_y = p.y;
                             min_idx = i;
                         }
                     }
-                    
-                    current = grid[row][col].swap_remove(min_idx);
+
+                    // 開始点として設定し、リストから削除
+                    current = bucket.swap_remove(min_idx);
                     path.push(current);
                     found_start = true;
                     break 'start_search;
@@ -228,7 +230,7 @@ impl ArtworkToCommandConverter {
         for _ in 1..total_dots {
             let current_col = (current.x as usize) / (GRID_SIZE as usize);
             let current_row = (current.y as usize) / (GRID_SIZE as usize);
-            
+
             let mut nearest_dist = u32::MAX;
             let mut nearest_point = Coordinates::new(0, 0);
             let mut found_bucket_row = 0;
@@ -239,24 +241,25 @@ impl ArtworkToCommandConverter {
             // 近隣のバケットから探索範囲を広げていく
             // 半径0（自身のバケット）から開始
             let max_radius = std::cmp::max(GRID_ROWS, GRID_COLS);
-            
+
             'search: for radius in 0..=max_radius {
                 // 探索範囲のバケットをチェック
                 let r_min = (current_row as isize - radius as isize).max(0) as usize;
-                let r_max = (current_row as isize + radius as isize).min(GRID_ROWS as isize - 1) as usize;
+                let r_max =
+                    (current_row as isize + radius as isize).min(GRID_ROWS as isize - 1) as usize;
                 let c_min = (current_col as isize - radius as isize).max(0) as usize;
-                let c_max = (current_col as isize + radius as isize).min(GRID_COLS as isize - 1) as usize;
+                let c_max =
+                    (current_col as isize + radius as isize).min(GRID_COLS as isize - 1) as usize;
 
                 let mut found_in_radius = false;
 
-                for r in r_min..=r_max {
-                    for c in c_min..=c_max {
+                for (r, row) in grid.iter().enumerate().take(r_max + 1).skip(r_min) {
+                    for (c, _) in row.iter().enumerate().take(c_max + 1).skip(c_min) {
                         // 半径のエッジにあるバケットのみをチェック（内側は既にチェック済み）
                         // ただしradius=0の場合はチェックする
-                        let is_edge = radius == 0 || 
-                                      r == r_min || r == r_max || 
-                                      c == c_min || c == c_max;
-                        
+                        let is_edge =
+                            radius == 0 || r == r_min || r == r_max || c == c_min || c == c_max;
+
                         if is_edge && !grid[r][c].is_empty() {
                             for (i, p) in grid[r][c].iter().enumerate() {
                                 let dist = current.manhattan_distance_to(p);
@@ -319,7 +322,7 @@ impl ArtworkToCommandConverter {
             for i in 0..n - 2 {
                 // jはi+2から開始し、ウィンドウサイズまたは配列末尾まで
                 let end_j = std::cmp::min(i + WINDOW_SIZE, n - 1);
-                
+
                 for j in i + 2..end_j {
                     let p1 = path[i];
                     let p2 = path[i + 1];
@@ -327,7 +330,8 @@ impl ArtworkToCommandConverter {
                     let p4 = path[j + 1];
 
                     // 現在の距離（p1->p2 + p3->p4）
-                    let current_dist = p1.manhattan_distance_to(&p2) + p3.manhattan_distance_to(&p4);
+                    let current_dist =
+                        p1.manhattan_distance_to(&p2) + p3.manhattan_distance_to(&p4);
                     // 交換後の距離（p1->p3 + p2->p4）
                     // p1からp3へ行き、そこから逆順にp2へ戻り、p4へ向かう
                     let new_dist = p1.manhattan_distance_to(&p3) + p2.manhattan_distance_to(&p4);
@@ -482,7 +486,7 @@ mod tests {
             .windows(2)
             .map(|w| w[0].manhattan_distance_to(&w[1]))
             .sum();
-            
+
         let optimized_dist: u32 = optimized
             .windows(2)
             .map(|w| w[0].manhattan_distance_to(&w[1]))
@@ -491,13 +495,20 @@ mod tests {
         println!("Original distance: {}", original_dist);
         println!("Optimized distance: {}", optimized_dist);
 
-        assert!(optimized_dist < original_dist, "Optimized path should be shorter");
-        assert_eq!(optimized.len(), path.len(), "Path length should be preserved");
-        
+        assert!(
+            optimized_dist < original_dist,
+            "Optimized path should be shorter"
+        );
+        assert_eq!(
+            optimized.len(),
+            path.len(),
+            "Path length should be preserved"
+        );
+
         // Check if start point is preserved (optional, but usually desired for first point)
         // Note: 2-opt might reverse the whole path or segments, but usually we fix start if needed.
         // In my implementation, I start swapping from i=0, so path[0] is fixed as p1 in the first iteration?
-        // Actually, i goes from 0 to n-2. p1 = path[i]. 
+        // Actually, i goes from 0 to n-2. p1 = path[i].
         // If i=0, p1=path[0]. We swap path[i+1..=j]. So path[0] is never moved.
         assert_eq!(optimized[0], path[0], "Start point should be preserved");
     }
