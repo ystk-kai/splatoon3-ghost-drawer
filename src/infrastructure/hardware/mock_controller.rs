@@ -2,9 +2,15 @@ use crate::domain::controller::{ControllerCommand, ControllerEmulator};
 use crate::domain::hardware::errors::HardwareError;
 use std::thread;
 use std::time::Duration;
-use tracing::{info, debug};
+use tracing::{debug, info};
 
 pub struct MockController;
+
+impl Default for MockController {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl MockController {
     pub fn new() -> Self {
@@ -25,8 +31,8 @@ impl ControllerEmulator for MockController {
     fn execute_command(&self, command: &ControllerCommand) -> Result<(), HardwareError> {
         debug!("Mock executing command: {}", command.name);
         for action in &command.sequence {
-             // Simulate action duration
-             thread::sleep(Duration::from_millis(action.duration_ms as u64));
+            // Simulate action duration
+            thread::sleep(Duration::from_millis(action.duration_ms as u64));
         }
         Ok(())
     }
